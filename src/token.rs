@@ -3,12 +3,12 @@ use crate::serde_utils::{serialize_signature, deserialize_signature};
 use serde::{Deserialize, Serialize};
 
 /// IronShield Token structure
-///
+/// 
 /// * `challenge_signature`:      The Ed25519 signature of the challenge.
 /// * `valid_for`:                The Unix timestamp in unix millis.
-/// * `public_key`:               The Ed25519 public key corresponding
+/// * `public_key`:               The Ed25519 public key corresponding 
 ///                               to the central private key (32 bytes).
-/// * `authentication_signature`: The signature over (challenge_signature
+/// * `authentication_signature`: The signature over (challenge_signature 
 ///                               || valid_for).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IronShieldToken {
@@ -65,7 +65,7 @@ impl IronShieldToken {
             hex::encode(self.authentication_signature)
         )
     }
-
+    
     /// Creates an `IronShieldToken` from a concatenated string.
     ///
     /// This function reverses the operation of `IronShieldToken::concat_struct`.
@@ -84,7 +84,7 @@ impl IronShieldToken {
     ///                           if parsing fails.
     pub fn from_concat_struct(concat_str: &str) -> Result<Self, String> {
         let parts: Vec<&str> = concat_str.split('|').collect();
-
+        
         if parts.len() != 4 {
             return Err(format!("Expected 4 parts, got {}", parts.len()));
         }
@@ -93,15 +93,15 @@ impl IronShieldToken {
             .map_err(|_| "Failed to decode challenge_signature hex string")?;
         let challenge_signature: [u8; 64] = challenge_signature_bytes.try_into()
             .map_err(|_| "Challenge signature must be exactly 64 bytes")?;
-
+        
         let valid_for = parts[1].parse::<i64>()
             .map_err(|_| "Failed to parse valid_for as i64")?;
-
+        
         let public_key_bytes = hex::decode(parts[2])
             .map_err(|_| "Failed to decode public_key hex string")?;
         let public_key: [u8; 32] = public_key_bytes.try_into()
             .map_err(|_| "Public key must be exactly 32 bytes")?;
-
+        
         let authentication_signature_bytes = hex::decode(parts[3])
             .map_err(|_| "Failed to decode authentication_signature hex string")?;
         let authentication_signature: [u8; 64] = authentication_signature_bytes.try_into()
@@ -119,11 +119,10 @@ impl IronShieldToken {
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    
     #[test]
     fn test_from_concat_struct_edge_cases() {
-        // Test with a valid minimum length hex (32 bytes = 64 hex chars 
-        // for public_key, 64 bytes = 128 hex chars for signatures).
+        // Test with a valid minimum length hex (32 bytes = 64 hex chars for public_key, 64 bytes = 128 hex chars for signatures).
         // Building strings programmatically.
         let valid_32_byte_hex = "0".repeat(64);  // 32 bytes = 64 hex chars
         let valid_64_byte_hex = "0".repeat(128); // 64 bytes = 128 hex chars
@@ -233,7 +232,7 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Failed to parse valid_for as i64"));
 
-        // Test with wrong length hex strings
+        // Test with wrong length hex strings.
         let short_hex = "0".repeat(32); // Too short for a 64-byte signature.
         let input = format!("{}|1000000|{}|{}", short_hex, valid_32_hex, valid_64_hex);
         let result = IronShieldToken::from_concat_struct(&input);
