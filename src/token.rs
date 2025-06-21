@@ -114,6 +114,54 @@ impl IronShieldToken {
             authentication_signature,
         })
     }
+
+    /// Encodes the response as a base64url string for HTTP header transport.
+    ///
+    /// This method concatenates all response fields using the established `|` delimiter
+    /// format, and then base64url-encodes the result for safe transport in HTTP headers.
+    ///
+    /// # Returns
+    /// * `String` - Base64url-encoded string ready for HTTP header use
+    ///
+    /// # Example
+    /// ```
+    /// use ironshield_types::IronShieldToken;
+    /// let response = IronShieldToken::new([0xAB; 64], 12345, [0x12; 32], [0x34; 64]);
+    /// let header_value = response.to_base64url_header();
+    /// // Use header_value in HTTP header: "X-IronShield-Challenge-Response: {header_value}"
+    /// ```
+    pub fn to_base64url_header(&self) -> String {
+        crate::serde_utils::concat_struct_base64url_encode(&self.concat_struct())
+    }
+
+    /// Decodes a base64url-encoded response from an HTTP header.
+    ///
+    /// This method reverses the `to_base64url_header()` operation by first base64url-decoding
+    /// the input string and then parsing it using the established `|` delimiter format.
+    ///
+    /// # Arguments
+    /// * `encoded_header` - The base64url-encoded string from the HTTP header
+    ///
+    /// # Returns
+    /// * `Result<Self, String>` - Decoded response or detailed error message
+    ///
+    /// # Example
+    /// ```
+    /// use ironshield_types::IronShieldToken;
+    /// // Create a response and encode it
+    /// let original = IronShieldToken::new([0xAB; 64], 12345, [0x12; 32], [0x34; 64]);
+    /// let header_value = original.to_base64url_header();
+    /// // Decode it back
+    /// let decoded = IronShieldToken::from_base64url_header(&header_value).unwrap();
+    /// assert_eq!(original.challenge_signature, decoded.challenge_signature);
+    /// ```
+    pub fn from_base64url_header(encoded_header: &str) -> Result<Self, String> {
+        // Decode using the existing serde_utils function.
+        let concat_str: String = crate::serde_utils::concat_struct_base64url_decode(encoded_header.to_string())?;
+
+        // Parse using the existing concat_struct format.
+        Self::from_concat_struct(&concat_str)
+    }
 }
 
 #[cfg(test)]
