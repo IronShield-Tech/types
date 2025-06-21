@@ -1,5 +1,5 @@
 //! Shared types and utilities for the IronShield PoW system
-//! 
+//!
 //! This crate contains the common data structures and serialization utilities
 //! used across ironshield-core, ironshield-cloudflare, and ironshield-wasm.
 
@@ -9,6 +9,7 @@ mod response;
 mod token;
 mod crypto;
 mod js_challenge;
+mod js_response;
 
 pub use serde_utils::*;
 pub use challenge::*;
@@ -17,4 +18,4 @@ pub use token::*;
 pub use crypto::*;
 
 // Re-export chrono for convenience
-pub use chrono; 
+pub use chrono;
