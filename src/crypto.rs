@@ -1,4 +1,4 @@
-//! Cryptographic operations for IronShield challenges
+//! # Cryptographic operations for IronShield challenges
 //! 
 //! This module provides Ed25519 signature generation and verification for IronShield challenges,
 //! including key management from environment variables and challenge signing/verification.
