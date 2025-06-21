@@ -4,14 +4,14 @@ use serde::{Deserialize, Serialize};
 
 /// IronShield Challenge structure for the proof-of-work algorithm
 /// 
-/// * `random_nonce`:     The SHA-256 hash of a random number (hex string).
-/// * `created_time`:     Unix milli timestamp for the challenge.
-/// * `expiration_time`:  Unix milli timestamp for the challenge expiration time.
-/// * `challenge_param`:  Target threshold - hash must be less than this value.
+/// * `random_nonce`:         The SHA-256 hash of a random number (hex string).
+/// * `created_time`:         Unix milli timestamp for the challenge.
+/// * `expiration_time`:      Unix milli timestamp for the challenge expiration time.
+/// * `challenge_param`:      Target threshold - hash must be less than this value.
 /// * `recommended_attempts`: Expected number of attempts for user guidance (3x difficulty).
-/// * `website_id`:       The identifier of the website.
-/// * `public_key`:       Ed25519 public key for signature verification.
-/// * `challenge_signature`: Ed25519 signature over the challenge data.
+/// * `website_id`:           The identifier of the website.
+/// * `public_key`:           Ed25519 public key for signature verification.
+/// * `challenge_signature`:  Ed25519 signature over the challenge data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IronShieldChallenge {
     pub random_nonce:        String,
@@ -69,10 +69,10 @@ impl IronShieldChallenge {
     /// This function accurately calculates this for difficulties ranging from 1 to u64::MAX.
     ///
     /// # Arguments
-    /// * `difficulty` - Expected number of attempts (must be > 0)
+    /// * `difficulty`: Expected number of attempts (must be > 0)
     ///
     /// # Returns
-    /// * `[u8; 32]` - The challenge_param bytes in big-endian format
+    /// * `[u8; 32]`: The challenge_param bytes in big-endian format
     ///
     /// # Panics
     /// * Panics if difficulty is 0
@@ -88,31 +88,31 @@ impl IronShieldChallenge {
         }
         
         if difficulty == 1 {
-            // Special case: difficulty 1 means almost certain success
+            // Special case: difficulty 1 means almost certain success.
             return [0xFF; 32];
         }
         
-        // Calculate log2(difficulty) for bit positioning
+        // Calculate log2(difficulty) for bit positioning.
         let difficulty_f64: f64 = difficulty as f64;
         let log2_difficulty: f64 = difficulty_f64.log2();
         
         // Target exponent: 256 - log2(difficulty)
-        // This gives us the exponent of 2 in the result 2^256 / difficulty ≈ 2^target_exponent
+        // This gives us the exponent of 2 in the result 2^256 / difficulty ≈ 2^target_exponent.
         let target_exponent: f64 = 256.0 - log2_difficulty;
         
         if target_exponent <= 0.0 {
-            // Result would be less than 1, return minimal value
+            // The result would be less than 1, return minimal value.
             let mut result: [u8; 32] = [0u8; 32];
             result[31] = 1;
             return result;
         }
         
         if target_exponent >= 256.0 {
-            // Result would overflow, return maximum
+            // Result would overflow, return maximum.
             return [0xFF; 32];
         }
         
-        // Round to nearest whole number for simplicity
+        // Round to the nearest whole number for simplicity.
         let exponent: usize = target_exponent.round() as usize;
         
         if exponent >= 256 {
@@ -121,15 +121,15 @@ impl IronShieldChallenge {
         
         let mut result: [u8; 32] = [0u8; 32];
         
-        // Set bit at position 'exponent' (where 255 is MSB, 0 is LSB)
-        // For big-endian byte array: bit N is in byte (255-N)/8, bit (7-((255-N)%8))
+        // Set the bit at the position 'exponent' (where 255 is MSB, 0 is LSB).
+        // For a big-endian byte array: bit N is in byte (255-N)/8, bit (7-((255-N)%8)).
         let byte_index: usize = (255 - exponent) / 8;
         let bit_index: usize = 7 - ((255 - exponent) % 8);
         
         if byte_index < 32 {
             result[byte_index] = 1u8 << bit_index;
         } else {
-            // Very small result, set the least significant bit
+            // Very small result, set the least significant bit.
             result[31] = 1;
         }
         
@@ -153,14 +153,14 @@ impl IronShieldChallenge {
     /// to give users a reasonable upper bound for planning purposes.
     /// 
     /// # Arguments
-    /// * `difficulty` - The target difficulty (expected number of attempts)
+    /// * `difficulty`: The target difficulty (expected number of attempts)
     /// 
     /// # Returns
-    /// * `u64` - Recommended number of attempts (3x the difficulty)
+    /// * `u64`: Recommended number of attempts (3x the difficulty)
     /// 
     /// # Examples
-    /// * difficulty = 1000 → recommended_attempts = 3000
-    /// * difficulty = 50000 → recommended_attempts = 150000
+    /// * difficulty = 1,000 → recommended_attempts = 3,000
+    /// * difficulty = 50,000 → recommended_attempts = 150,000
     pub fn recommended_attempts(difficulty: u64) -> u64 {
         difficulty.saturating_mul(3)
     }
@@ -168,7 +168,7 @@ impl IronShieldChallenge {
     /// Sets the recommended_attempts field based on the given difficulty.
     /// 
     /// # Arguments
-    /// * `difficulty` - The difficulty value to base the recommendation on
+    /// * `difficulty` - The difficulty value to base the recommendation on.
     pub fn set_recommended_attempts(&mut self, difficulty: u64) {
         self.recommended_attempts = Self::recommended_attempts(difficulty);
     }
@@ -262,10 +262,10 @@ impl IronShieldChallenge {
     /// Encodes the challenge as a base64url string for HTTP header transport.
     /// 
     /// This method concatenates all challenge fields using the established `|` delimiter
-    /// format and then base64url-encodes the result for safe transport in HTTP headers.
+    /// format, and then base64url-encodes the result for safe transport in HTTP headers.
     /// 
     /// # Returns
-    /// * `String` - Base64url-encoded string ready for HTTP header use
+    /// * `String`: Base64url-encoded string ready for HTTP header use
     /// 
     /// # Example
     /// ```
@@ -291,10 +291,10 @@ impl IronShieldChallenge {
     /// the input string and then parsing it using the established `|` delimiter format.
     /// 
     /// # Arguments
-    /// * `encoded_header` - The base64url-encoded string from the HTTP header
+    /// * `encoded_header`: The base64url-encoded string from the HTTP header
     /// 
     /// # Returns
-    /// * `Result<Self, String>` - Decoded challenge or detailed error message
+    /// * `Result<Self, String>`: Decoded challenge or detailed error message
     /// 
     /// # Example
     /// ```
@@ -314,10 +314,10 @@ impl IronShieldChallenge {
     /// assert_eq!(original.random_nonce, decoded.random_nonce);
     /// ```
     pub fn from_base64url_header(encoded_header: &str) -> Result<Self, String> {
-        // Decode using the existing serde_utils function
+        // Decode using the existing serde_utils function.
         let concat_str: String = crate::serde_utils::concat_struct_base64url_decode(encoded_header.to_string())?;
         
-        // Parse using existing concat_struct format
+        // Parse using the existing concat_struct format.
         Self::from_concat_struct(&concat_str)
     }
 }
@@ -328,11 +328,11 @@ mod tests {
 
     #[test]
     fn test_difficulty_to_challenge_param_basic_cases() {
-        // Test very easy case
+        // Test a very easy case.
         let challenge_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(1);
         assert_eq!(challenge_param, [0xFF; 32]);
         
-        // Test exact powers of 2
+        // Test the exact powers of 2.
         let challenge_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(2);
         let expected: [u8; 32] = {
             let mut arr: [u8; 32] = [0x00; 32];
@@ -360,32 +360,32 @@ mod tests {
 
     #[test]
     fn test_difficulty_to_challenge_param_realistic_range() {
-        // Test difficulties in the expected range: 10,000 to 10,000,000
+        // Test difficulties in the expected range: 10,000 to 10,000,000.
         
-        // difficulty = 10,000 ≈ 2^13.29, so result ≈ 2^242.71 → rounds to 2^243
+        // difficulty = 10,000 ≈ 2^13.29, so the result ≈ 2^242.71 → rounds to 2^243.
         let challenge_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(10_000);
-        // Should have bit 243 set (byte 1, bit 3)
+        // Should have bit 243 set (byte 1, bit 3).
         assert_eq!(challenge_param[0], 0x00);
         assert_eq!(challenge_param[1], 0x08); // bit 3 = 0x08
         
-        // difficulty = 50,000 ≈ 2^15.61, so result ≈ 2^240.39 → rounds to 2^240
+        // difficulty = 50,000 ≈ 2^15.61, so the result ≈ 2^240.39 → rounds to 2^240.
         let challenge_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(50_000);
         assert_eq!(challenge_param[0], 0x00);
         assert_eq!(challenge_param[1], 0x01); // bit 0 = 0x01
         
-        // difficulty = 100,000 ≈ 2^16.61, so result ≈ 2^239.39 → rounds to 2^239
+        // difficulty = 100,000 ≈ 2^16.61, so the result ≈ 2^239.39 → rounds to 2^239.
         let challenge_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(100_000);
         assert_eq!(challenge_param[0], 0x00);
         assert_eq!(challenge_param[1], 0x00);
         assert_eq!(challenge_param[2], 0x80); // bit 7 of byte 2
         
-        // difficulty = 1,000,000 ≈ 2^19.93, so result ≈ 2^236.07 → rounds to 2^236
+        // difficulty = 1,000,000 ≈ 2^19.93, so the result ≈ 2^236.07 → rounds to 2^236.
         let challenge_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(1_000_000);
         assert_eq!(challenge_param[0], 0x00);
         assert_eq!(challenge_param[1], 0x00);
         assert_eq!(challenge_param[2], 0x10); // bit 4 of byte 2
         
-        // difficulty = 10,000,000 ≈ 2^23.25, so result ≈ 2^232.75 → rounds to 2^233
+        // difficulty = 10,000,000 ≈ 2^23.25, so the result ≈ 2^232.75 → rounds to 2^233.
         let challenge_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(10_000_000);
         assert_eq!(challenge_param[0], 0x00);
         assert_eq!(challenge_param[1], 0x00);
@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_difficulty_to_challenge_param_ordering() {
-        // Test that higher difficulties produce smaller challenge_params
+        // Test that higher difficulties produce smaller challenge_params.
         let difficulties: [u64; 9] = [1000, 5000, 10_000, 50_000, 100_000, 500_000, 1_000_000, 5_000_000, 10_000_000];
         let mut challenge_params = Vec::new();
         
@@ -402,7 +402,7 @@ mod tests {
             challenge_params.push(IronShieldChallenge::difficulty_to_challenge_param(difficulty));
         }
         
-        // Verify that challenge_params are in descending order (higher difficulty = smaller param)
+        // Verify that challenge_params are in descending order (higher difficulty = smaller param).
         for i in 1..challenge_params.len() {
             assert!(
                 challenge_params[i-1] > challenge_params[i],
@@ -414,39 +414,39 @@ mod tests {
 
     #[test]
     fn test_difficulty_to_challenge_param_precision() {
-        // Test that similar difficulties produce appropriately similar results
+        // Test that similar difficulties produce appropriately similar results.
         let base_difficulty: u64 = 100_000;
         let base_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(base_difficulty);
         
-        // Small variations in difficulty will round to the same or nearby bit positions
+        // Small variations in difficulty will round to the same or nearby bit positions.
         let similar_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(100_001);
         
-        // With rounding, very similar difficulties might produce the same result
-        // The key test is that larger difficulties produce smaller or equal challenge_params
-        assert!(base_param >= similar_param); // Should be same or slightly larger
+        // With rounding, very similar difficulties might produce the same result.
+        // The key test is that larger difficulties produce smaller or equal challenge_params.
+        assert!(base_param >= similar_param); // Should be the same or slightly larger.
         
-        // Test that larger differences produce measurably different results
+        // Test that larger differences produce measurably different results.
         let much_different_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(200_000);
         assert!(base_param > much_different_param);
         
-        // Test that the ordering is consistent for larger changes
+        // Test that the ordering is consistent for larger changes.
         let big_different_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(400_000);
         assert!(much_different_param > big_different_param);
     }
 
     #[test]
     fn test_difficulty_to_challenge_param_powers_of_10() {
-        // Test various powers of 10
+        // Test various powers of 10.
         let difficulties: [u64; 6] = [10, 100, 1_000, 10_000, 100_000, 1_000_000];
         
         for &difficulty in &difficulties {
             let challenge_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(difficulty);
             
-            // Should not be all zeros or all FFs (except for difficulty 1)
+            // Should not be all zeros or all FFs (except for difficulty 1).
             assert_ne!(challenge_param, [0x00; 32]);
             assert_ne!(challenge_param, [0xFF; 32]);
             
-            // Should have a reasonable number of leading zeros
+            // Should have a reasonable number of leading zeros.
             let leading_zero_bytes: usize = challenge_param.iter().take_while(|&&b| b == 0).count();
             assert!(leading_zero_bytes < 32, "Too many leading zero bytes for difficulty {}", difficulty);
             
@@ -457,7 +457,7 @@ mod tests {
 
     #[test]
     fn test_difficulty_to_challenge_param_mathematical_properties() {
-        // Test mathematical properties of the algorithm
+        // Test mathematical properties of the algorithm.
         
         // For difficulty D1 and D2 where D2 = 2 * D1, 
         // challenge_param(D1) should be approximately 2 * challenge_param(D2)
@@ -467,29 +467,29 @@ mod tests {
         let param1: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(d1);
         let param2: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(d2);
         
-        // Convert to u128 for comparison (taking first 16 bytes)
+        // Convert to u128 for comparison (taking first 16 bytes).
         let val1: u128 = u128::from_be_bytes(param1[0..16].try_into().unwrap());
         let val2: u128 = u128::from_be_bytes(param2[0..16].try_into().unwrap());
         
-        // val1 should be approximately 2 * val2 (within reasonable tolerance)
+        // val1 should be approximately 2 * val2 (within reasonable tolerance).
         let ratio: f64 = val1 as f64 / val2 as f64;
         assert!(ratio > 1.8 && ratio < 2.2, "Ratio should be close to 2.0, got {}", ratio);
     }
 
     #[test]
     fn test_difficulty_to_challenge_param_edge_cases() {
-        // Test zero difficulty panics
+        // Test zero difficulty panics.
         let result = std::panic::catch_unwind(|| {
             IronShieldChallenge::difficulty_to_challenge_param(0);
         });
         assert!(result.is_err());
         
-        // Test very high difficulty produces a small value
+        // Test very high difficulty produces a small value.
         let challenge_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(u64::MAX);
         assert_ne!(challenge_param, [0xFF; 32]);
         assert_ne!(challenge_param, [0; 32]);
         
-        // Test moderately high difficulties
+        // Test moderately high difficulties.
         let high_difficulty: u64 = 1u64 << 40; // 2^40
         let challenge_param: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(high_difficulty);
         assert_ne!(challenge_param, [0; 32]);
@@ -498,7 +498,7 @@ mod tests {
 
     #[test]
     fn test_difficulty_to_challenge_param_consistency() {
-        // Test that the function produces consistent results
+        // Test that the function produces consistent results.
         let test_difficulties: [u64; 13] = [
             10_000, 25_000, 50_000, 75_000, 100_000,
             250_000, 500_000, 750_000, 1_000_000,
@@ -510,7 +510,7 @@ mod tests {
             let param2: [u8; 32] = IronShieldChallenge::difficulty_to_challenge_param(difficulty);
             assert_eq!(param1, param2, "Function should be deterministic for difficulty {}", difficulty);
             
-            // Test that the challenge param is reasonable
+            // Test that the challenge param is reasonable.
             assert_ne!(param1, [0x00; 32]);
             assert_ne!(param1, [0xFF; 32]);
         }
@@ -581,7 +581,7 @@ mod tests {
         let min_param = IronShieldChallenge::difficulty_to_challenge_param(min_difficulty);
         let max_param = IronShieldChallenge::difficulty_to_challenge_param(max_difficulty);
         
-        // Min difficulty should produce larger challenge_param than max difficulty
+        // Min difficulty should produce a larger challenge_param than max difficulty.
         assert!(min_param > max_param);
         
         // Both should be reasonable values
@@ -595,7 +595,59 @@ mod tests {
         let above_max = IronShieldChallenge::difficulty_to_challenge_param(10_000_001);
         
         // With rounding, very close values might produce the same result
-        assert!(below_min >= min_param); // Should be same or larger
-        assert!(above_max <= max_param); // Should be same or smaller
+        assert!(below_min >= min_param); // Should be the same or larger
+        assert!(above_max <= max_param); // Should be the same or smaller
+    }
+
+    #[test]
+    fn test_from_concat_struct_edge_cases() {
+        // Test with a valid minimum length hex (32 bytes = 64 hex chars 
+        // for challenge_param and public_key, 64 bytes = 128 hex chars 
+        // for signature).
+        // Building strings programmatically.
+        let valid_32_byte_hex = "0".repeat(64);  // 32 bytes = 64 hex chars
+        let valid_64_byte_hex = "0".repeat(128); // 64 bytes = 128 hex chars
+        assert_eq!(valid_32_byte_hex.len(), 64, "32-byte hex string should be exactly 64 characters");
+        assert_eq!(valid_64_byte_hex.len(), 128, "64-byte hex string should be exactly 128 characters");
+
+        let input = format!("test_nonce|1000000|1030000|test_website|{}|{}|{}",
+                            valid_32_byte_hex, valid_32_byte_hex, valid_64_byte_hex);
+        let result = IronShieldChallenge::from_concat_struct(&input);
+
+        if result.is_err() {
+            panic!("Expected success but got error: {}", result.unwrap_err());
+        }
+
+        let parsed = result.unwrap();
+        assert_eq!(parsed.random_nonce, "test_nonce");
+        assert_eq!(parsed.created_time, 1000000);
+        assert_eq!(parsed.expiration_time, 1030000);
+        assert_eq!(parsed.website_id, "test_website");
+        assert_eq!(parsed.challenge_param, [0u8; 32]);
+        assert_eq!(parsed.public_key, [0u8; 32]);
+        assert_eq!(parsed.challenge_signature, [0u8; 64]);
+
+        // Test with all F's hex.
+        let all_f_32_hex = "f".repeat(64);   // 32 bytes of 0xFF
+        let all_f_64_hex = "f".repeat(128);  // 64 bytes of 0xFF
+        assert_eq!(all_f_32_hex.len(), 64, "All F's 32-byte hex string should be exactly 64 characters");
+        assert_eq!(all_f_64_hex.len(), 128, "All F's 64-byte hex string should be exactly 128 characters");
+
+        let input = format!("max_nonce|9999999|9999999|max_website|{}|{}|{}",
+                            all_f_32_hex, all_f_32_hex, all_f_64_hex);
+        let result = IronShieldChallenge::from_concat_struct(&input);
+
+        if result.is_err() {
+            panic!("Expected success but got error: {}", result.unwrap_err());
+        }
+
+        let parsed = result.unwrap();
+        assert_eq!(parsed.random_nonce, "max_nonce");
+        assert_eq!(parsed.created_time, 9999999);
+        assert_eq!(parsed.expiration_time, 9999999);
+        assert_eq!(parsed.website_id, "max_website");
+        assert_eq!(parsed.challenge_param, [0xffu8; 32]);
+        assert_eq!(parsed.public_key, [0xffu8; 32]);
+        assert_eq!(parsed.challenge_signature, [0xffu8; 64]);
     }
 } 
