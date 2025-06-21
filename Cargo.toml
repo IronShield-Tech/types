@@ -1,0 +1,18 @@
+[package]
+name = "ironshield-types"
+version = "0.1.0"
+edition = "2021"
+authors = [ "ebosspc <software2070@protonmail.com>" ]
+description = "Shared types and utilities for the IronShield PoW system"
+license = "BUSL-1.1" # Becomes Apache-2.0 after 2028-07-24
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+hex = "0.4"
+base64 = "0.22.1"
+
+[lib]
+name = "ironshield_types"
+path = "src/lib.rs" 
