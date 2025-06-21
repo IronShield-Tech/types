@@ -42,14 +42,14 @@ impl JsIronShieldChallenge {
     /// Converts the challenge to a JavaScript object.
     ///
     /// # Returns
-    /// * `Result<JsValue, JsValue>`: JavaScript object or error
+    /// * `Result<JsValue, JsValue>`: JavaScript object or error.
     #[wasm_bindgen]
     pub fn to_js_object(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.inner)
             .map_err(|e| JsValue::from_str(&format!("Failed to convert challenge to JS object: {:?}", e)))
     }
     
-    /// Encodes the challenge to a Base64 URL-safe string 
+    /// Encodes the challenge as a Base64 URL-safe string 
     /// without padding.
     /// 
     /// # Returns
@@ -59,7 +59,7 @@ impl JsIronShieldChallenge {
         self.inner.to_base64url_header()
     }
     
-    /// Verifies the challenge from a Base64 URL-safe encoded header value.
+    /// Creates a response from a Base64 URL-safe encoded header string-value.
     /// 
     /// # Arguments
     /// * `encoded_header_value`: The Base64 URL-safe encoded string to decode.
@@ -72,7 +72,7 @@ impl JsIronShieldChallenge {
         let challenge = IronShieldChallenge::from_base64url_header(encoded_header_value)
             .map_err(|e| JsValue::from_str(&format!("Failed to decode Base64 URL-safe header: {}", e)))?;
         
-        Ok(JsIronShieldChallenge { inner: challenge })
+        Ok(Self { inner: challenge })
     }
     
     /// Gets the random nonce as a string.
