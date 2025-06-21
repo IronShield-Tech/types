@@ -7,11 +7,13 @@ mod serde_utils;
 mod challenge;
 mod response;
 mod token;
+mod crypto;
 
 pub use serde_utils::*;
 pub use challenge::*;
 pub use response::*;
 pub use token::*;
+pub use crypto::*;
 
 // Re-export chrono for convenience
 pub use chrono; 
