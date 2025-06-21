@@ -20,7 +20,7 @@ impl JsIronShieldChallenge {
     /// 
     /// # Returns
     /// * `Result<JsIronShieldChallenge, JsValue>`: A wrapped challenge 
-    ///    or an error if parsing fails.
+    ///                                             or an error if parsing fails.
     #[wasm_bindgen(constructor)]
     pub fn from_json(json_str: &str) -> Result<Self, JsValue> {
         let challenge: IronShieldChallenge = serde_json::from_str(json_str)
