@@ -88,10 +88,10 @@ pub fn concat_struct_base64url_encode(concat_string: &str) -> String {
 /// * Returns a `base64::DecodeError` if the input string 
 ///   is not valid Base64 URL-safe encoded.
 pub fn concat_struct_base64url_decode(encoded_string: String) -> Result<String, String> {
-    let decoded_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+    let decoded_bytes: Vec<u8> = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(encoded_string)
-        .map_err(|e| format!("Base64 decode error: {}", e))?;
+        .map_err(|e: base64::DecodeError| format!("Base64 decode error: {}", e))?;
 
     String::from_utf8(decoded_bytes)
-        .map_err(|e| format!("UTF-8 conversion error: {}", e))
+        .map_err(|e: std::string::FromUtf8Error| format!("UTF-8 conversion error: {}", e))
 } 

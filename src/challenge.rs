@@ -315,7 +315,7 @@ impl IronShieldChallenge {
     /// ```
     pub fn from_base64url_header(encoded_header: &str) -> Result<Self, String> {
         // Decode using the existing serde_utils function
-        let concat_str = crate::serde_utils::concat_struct_base64url_decode(encoded_header.to_string())?;
+        let concat_str: String = crate::serde_utils::concat_struct_base64url_decode(encoded_header.to_string())?;
         
         // Parse using existing concat_struct format
         Self::from_concat_struct(&concat_str)

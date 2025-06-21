@@ -117,7 +117,7 @@ impl IronShieldChallengeResponse {
     /// ```
     pub fn from_base64url_header(encoded_header: &str) -> Result<Self, String> {
         // Decode using the existing serde_utils function
-        let concat_str = crate::serde_utils::concat_struct_base64url_decode(encoded_header.to_string())?;
+        let concat_str: String = crate::serde_utils::concat_struct_base64url_decode(encoded_header.to_string())?;
         
         // Parse using existing concat_struct format
         Self::from_concat_struct(&concat_str)
@@ -131,11 +131,11 @@ mod tests {
     #[test]
     fn test_response_base64url_header_encoding_roundtrip() {
         // Create a test response
-        let response = IronShieldChallengeResponse::new([0xAB; 64], 12345);
+        let response: IronShieldChallengeResponse = IronShieldChallengeResponse::new([0xAB; 64], 12345);
 
         // Test base64url encoding and decoding
-        let encoded = response.to_base64url_header();
-        let decoded = IronShieldChallengeResponse::from_base64url_header(&encoded).unwrap();
+        let encoded: String = response.to_base64url_header();
+        let decoded: IronShieldChallengeResponse = IronShieldChallengeResponse::from_base64url_header(&encoded).unwrap();
 
         // Verify all fields are preserved through roundtrip
         assert_eq!(response.challenge_signature, decoded.challenge_signature);
@@ -145,14 +145,14 @@ mod tests {
     #[test]
     fn test_response_base64url_header_invalid_data() {
         // Test invalid base64url
-        let result = IronShieldChallengeResponse::from_base64url_header("invalid-base64!");
+        let result: Result<IronShieldChallengeResponse, String> = IronShieldChallengeResponse::from_base64url_header("invalid-base64!");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Base64 decode error"));
 
         // Test valid base64url but invalid concatenated format
         use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-        let invalid_format = URL_SAFE_NO_PAD.encode(b"only_one_part");
-        let result = IronShieldChallengeResponse::from_base64url_header(&invalid_format);
+        let invalid_format: String = URL_SAFE_NO_PAD.encode(b"only_one_part");
+        let result: Result<IronShieldChallengeResponse, String> = IronShieldChallengeResponse::from_base64url_header(&invalid_format);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Expected 2 parts"));
     }
