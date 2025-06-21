@@ -74,4 +74,86 @@ impl IronShieldChallengeResponse {
             solution,
         })
     }
+
+    /// Encodes the response as a base64url string for HTTP header transport.
+    /// 
+    /// This method concatenates all response fields using the established `|` delimiter
+    /// format and then base64url-encodes the result for safe transport in HTTP headers.
+    /// 
+    /// # Returns
+    /// * `String` - Base64url-encoded string ready for HTTP header use
+    /// 
+    /// # Example
+    /// ```
+    /// use ironshield_types::IronShieldChallengeResponse;
+    /// let response = IronShieldChallengeResponse::new([0xAB; 64], 12345);
+    /// let header_value = response.to_base64url_header();
+    /// // Use header_value in HTTP header: "X-IronShield-Challenge-Response: {header_value}"
+    /// ```
+    pub fn to_base64url_header(&self) -> String {
+        crate::serde_utils::concat_struct_base64url_encode(&self.concat_struct())
+    }
+
+    /// Decodes a base64url-encoded response from an HTTP header.
+    /// 
+    /// This method reverses the `to_base64url_header()` operation by first base64url-decoding
+    /// the input string and then parsing it using the established `|` delimiter format.
+    /// 
+    /// # Arguments
+    /// * `encoded_header` - The base64url-encoded string from the HTTP header
+    /// 
+    /// # Returns
+    /// * `Result<Self, String>` - Decoded response or detailed error message
+    /// 
+    /// # Example
+    /// ```
+    /// use ironshield_types::IronShieldChallengeResponse;
+    /// // Create a response and encode it
+    /// let original = IronShieldChallengeResponse::new([0xAB; 64], 12345);
+    /// let header_value = original.to_base64url_header();
+    /// // Decode it back
+    /// let decoded = IronShieldChallengeResponse::from_base64url_header(&header_value).unwrap();
+    /// assert_eq!(original.solution, decoded.solution);
+    /// ```
+    pub fn from_base64url_header(encoded_header: &str) -> Result<Self, String> {
+        // Decode using the existing serde_utils function
+        let concat_str = crate::serde_utils::concat_struct_base64url_decode(encoded_header.to_string())?;
+        
+        // Parse using existing concat_struct format
+        Self::from_concat_struct(&concat_str)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_response_base64url_header_encoding_roundtrip() {
+        // Create a test response
+        let response = IronShieldChallengeResponse::new([0xAB; 64], 12345);
+
+        // Test base64url encoding and decoding
+        let encoded = response.to_base64url_header();
+        let decoded = IronShieldChallengeResponse::from_base64url_header(&encoded).unwrap();
+
+        // Verify all fields are preserved through roundtrip
+        assert_eq!(response.challenge_signature, decoded.challenge_signature);
+        assert_eq!(response.solution, decoded.solution);
+    }
+
+    #[test]
+    fn test_response_base64url_header_invalid_data() {
+        // Test invalid base64url
+        let result = IronShieldChallengeResponse::from_base64url_header("invalid-base64!");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Base64 decode error"));
+
+        // Test valid base64url but invalid concatenated format
+        use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+        let invalid_format = URL_SAFE_NO_PAD.encode(b"only_one_part");
+        let result = IronShieldChallengeResponse::from_base64url_header(&invalid_format);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Expected 2 parts"));
+    }
 } 
