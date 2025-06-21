@@ -78,7 +78,7 @@ impl IronShieldChallengeResponse {
     /// Encodes the response as a base64url string for HTTP header transport.
     /// 
     /// This method concatenates all response fields using the established `|` delimiter
-    /// format and then base64url-encodes the result for safe transport in HTTP headers.
+    /// format, and then base64url-encodes the result for safe transport in HTTP headers.
     /// 
     /// # Returns
     /// * `String` - Base64url-encoded string ready for HTTP header use
@@ -116,10 +116,10 @@ impl IronShieldChallengeResponse {
     /// assert_eq!(original.solution, decoded.solution);
     /// ```
     pub fn from_base64url_header(encoded_header: &str) -> Result<Self, String> {
-        // Decode using the existing serde_utils function
+        // Decode using the existing serde_utils function.
         let concat_str: String = crate::serde_utils::concat_struct_base64url_decode(encoded_header.to_string())?;
         
-        // Parse using existing concat_struct format
+        // Parse using the existing concat_struct format.
         Self::from_concat_struct(&concat_str)
     }
 }
@@ -130,30 +130,79 @@ mod tests {
 
     #[test]
     fn test_response_base64url_header_encoding_roundtrip() {
-        // Create a test response
+        // Create a test response.
         let response: IronShieldChallengeResponse = IronShieldChallengeResponse::new([0xAB; 64], 12345);
 
-        // Test base64url encoding and decoding
+        // Test base64url encoding and decoding.
         let encoded: String = response.to_base64url_header();
         let decoded: IronShieldChallengeResponse = IronShieldChallengeResponse::from_base64url_header(&encoded).unwrap();
 
-        // Verify all fields are preserved through roundtrip
+        // Verify all fields are preserved through a round-trip.
         assert_eq!(response.challenge_signature, decoded.challenge_signature);
         assert_eq!(response.solution, decoded.solution);
     }
 
     #[test]
     fn test_response_base64url_header_invalid_data() {
-        // Test invalid base64url
+        // Test invalid base64url.
         let result: Result<IronShieldChallengeResponse, String> = IronShieldChallengeResponse::from_base64url_header("invalid-base64!");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Base64 decode error"));
 
-        // Test valid base64url but invalid concatenated format
+        // Test valid base64url but invalid concatenated format.
         use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
         let invalid_format: String = URL_SAFE_NO_PAD.encode(b"only_one_part");
         let result: Result<IronShieldChallengeResponse, String> = IronShieldChallengeResponse::from_base64url_header(&invalid_format);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Expected 2 parts"));
     }
-} 
+
+    #[test]
+    fn test_concat_struct() {
+        let response = IronShieldChallengeResponse::new([0; 64], 42);
+        let concat = response.concat_struct();
+        assert_eq!(concat, format!("{}|{}", hex::encode([0; 64]), 42.to_string()));
+    }
+
+    #[test]
+    fn test_from_concat_struct() {
+        let concat = format!("{}|{}", hex::encode([0; 64]), 42);
+        let response = IronShieldChallengeResponse::from_concat_struct(&concat).unwrap();
+        assert_eq!(response.challenge_signature, [0; 64]);
+        assert_eq!(response.solution, 42);
+    }
+
+    #[test]
+    fn test_from_concat_struct_edge_cases() {
+        // Test with a valid minimum length hex (64 bytes = 128 hex chars).
+        // Building a string programmatically.
+        let valid_hex = "0".repeat(128);
+        assert_eq!(valid_hex.len(), 128, "Hex string should be exactly 128 characters for 64 bytes");
+
+        let input = format!("{}|0", valid_hex);
+        let result = IronShieldChallengeResponse::from_concat_struct(&input);
+
+        if result.is_err() {
+            panic!("Expected success but got error: {}", result.unwrap_err());
+        }
+
+        let parsed = result.unwrap();
+        assert_eq!(parsed.challenge_signature, [0u8; 64]);
+        assert_eq!(parsed.solution, 0);
+
+        // Test with all F's hex.
+        let all_f_hex = "f".repeat(128);
+        assert_eq!(all_f_hex.len(), 128, "All F's hex string should be exactly 128 characters");
+
+        let input = format!("{}|-1", all_f_hex);
+        let result = IronShieldChallengeResponse::from_concat_struct(&input);
+
+        if result.is_err() {
+            panic!("Expected success but got error: {}", result.unwrap_err());
+        }
+
+        let parsed = result.unwrap();
+        assert_eq!(parsed.challenge_signature, [0xffu8; 64]);
+        assert_eq!(parsed.solution, -1);
+    }
+}
