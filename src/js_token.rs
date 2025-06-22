@@ -12,67 +12,18 @@ pub struct JsIronShieldToken {
 
 #[wasm_bindgen]
 impl JsIronShieldToken {
-    /// This creates a JavaScript constructor that can be called with `new JsIronShieldToken()`.
-    /// 
-    /// The `IronShieldToken` is incorporating `new` as the constructor
-    /// because it is intended to be created from individual components
-    /// on the client side, rather than being received from a server, 
-    /// and therefore does not have a `from_json` constructor.
-    ///
-    /// # Arguments
-    /// * `challenge_signature_hex`:  Challenge signature as hex string
-    /// * `valid_for`:                Validity period in milliseconds
-    /// * `public_key_hex`:           Public key as hex string
-    /// * `auth_signature_hex`:       Authentication signature as hex string
-    ///
-    /// # Returns
-    /// * `Result<JsIronShieldToken, JsValue>`: New token or error
-    #[wasm_bindgen(constructor)]
-    pub fn new(
-        challenge_signature_hex: &str,
-        valid_for:               i64,
-        public_key_hex:          &str,
-        auth_signature_hex:      &str,
-    ) -> Result<Self, JsValue> {
-        // Parse challenge signature.
-        let challenge_signature_bytes = hex::decode(challenge_signature_hex)
-            .map_err(|e| JsValue::from_str(&format!("Invalid challenge signature hex: {}", e)))?;
-        if challenge_signature_bytes.len() != 64 {
-            return Err(JsValue::from_str("Challenge signature must be exactly 64 bytes"));
-        }
-        let mut challenge_signature = [0u8; 64];
-        challenge_signature.copy_from_slice(&challenge_signature_bytes);
-
-        // Parse public key.
-        let public_key_bytes = hex::decode(public_key_hex)
-            .map_err(|e| JsValue::from_str(&format!("Invalid public key hex: {}", e)))?;
-        if public_key_bytes.len() != 32 {
-            return Err(JsValue::from_str("Public key must be exactly 32 bytes"));
-        }
-        let mut public_key = [0u8; 32];
-        public_key.copy_from_slice(&public_key_bytes);
-
-        // Parse authentication signature.
-        let auth_signature_bytes = hex::decode(auth_signature_hex)
-            .map_err(|e| JsValue::from_str(&format!("Invalid authentication signature hex: {}", e)))?;
-        if auth_signature_bytes.len() != 64 {
-            return Err(JsValue::from_str("Authentication signature must be exactly 64 bytes"));
-        }
-        let mut auth_signature = [0u8; 64];
-        auth_signature.copy_from_slice(&auth_signature_bytes);
-
-        let token = IronShieldToken::new(challenge_signature, valid_for, public_key, auth_signature);
-        Ok(Self { inner: token })
-    }
-
     /// Creates a new JavaScript binding for the `IronShieldToken` 
     /// from a JSON string.
+    ///
+    /// Constructor is `from_json` because `IronShieldToken`
+    /// is intended (typically) to be received from a server as JSON,
+    /// not created directly in JavaScript or created by the user.
     ///
     /// # Arguments
     /// * `json_str` - JSON representation of the token
     ///
     /// # Returns
-    /// * `Result<JsIronShieldToken, JsValue>` - Parsed token or error
+    /// * `Result<Self, JsValue>` - Parsed token or error
     #[wasm_bindgen]
     pub fn from_json(json_str: &str) -> Result<Self, JsValue> {
         let token: IronShieldToken = serde_json::from_str(json_str)

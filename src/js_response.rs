@@ -12,12 +12,41 @@ pub struct JsIronShieldChallengeResponse {
 
 #[wasm_bindgen]
 impl JsIronShieldChallengeResponse {
+    /// This creates a JavaScript constructor that can be called with 
+    /// `new JsIronShieldChallengeResponse()`.
+    ///
+    /// The `IronShieldChallengeResponse` is incorporating `new` as the 
+    /// constructor because it is intended to be created from individual
+    /// components on the client side, rather than being received from a 
+    /// server, and therefore does not have a `from_json` constructor.
+    ///
+    /// # Arguments
+    /// * `challenge_signature_hex`:  Challenge signature as hex string.
+    /// * `solution`:                 Solution nonce.
+    ///
+    /// # Returns
+    /// * `Result<Self, JsValue>`:    New token or an error.
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        challenge_signature_hex: &str,
+        solution:                i64,
+    ) -> Result<Self, JsValue> {
+        let signature_bytes = hex::decode(challenge_signature_hex)
+            .map_err(|e| JsValue::from_str(&format!("Invalid challenge signature hex: {}", e)))?;
+
+        if signature_bytes.len() != 64 {
+            return Err(JsValue::from_str("Challenge signature must be exactly 64 bytes."));
+        }
+
+        let mut signature = [0u8; 64];
+        signature.copy_from_slice(&signature_bytes);
+
+        let response = IronShieldChallengeResponse::new(signature, solution);
+        Ok(Self { inner: response})
+    }
+    
     /// Creates a new JavaScript binding for the `IronShieldChallengeResponse`
     /// from a JSON string.
-    ///
-    /// Constructor is `from_json` because `IronShieldChallengeResponse`
-    /// is intended (typically) to be received from a server as JSON,
-    /// not created directly in JavaScript or created by the user.
     /// 
     /// # Arguments
     /// * `json_str`: JSON representation of the response.
@@ -25,7 +54,7 @@ impl JsIronShieldChallengeResponse {
     /// # Returns
     /// * `Result<JsIronShieldResponse, JsValue>`: A wrapped response 
     ///                                            or an error if parsing fails.
-    #[wasm_bindgen(constructor)]
+    #[wasm_bindgen]
     pub fn from_json(json_str: &str) -> Result<Self, JsValue> {
         let response: IronShieldChallengeResponse = serde_json::from_str(json_str)
             .map_err(|e| JsValue::from_str(&format!("Failed to parse JSON: {}", e)))?;
