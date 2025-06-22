@@ -14,6 +14,10 @@ pub struct JsIronShieldChallengeResponse {
 impl JsIronShieldChallengeResponse {
     /// Creates a new JavaScript binding for the `IronShieldChallengeResponse`
     /// from a JSON string.
+    ///
+    /// Constructor is `from_json` because `IronShieldChallengeResponse`
+    /// is intended (typically) to be received from a server as JSON,
+    /// not created directly in JavaScript or created by the user.
     /// 
     /// # Arguments
     /// * `json_str`: JSON representation of the response.
@@ -43,7 +47,8 @@ impl JsIronShieldChallengeResponse {
     /// Converts the response to a JavaScript object.
     ///
     /// # Returns
-    /// * `Result<JsValue, JsValue>`: JavaScript object or error.
+    /// * `Result<JsValue, JsValue>`: JavaScript object or error
+    ///                               if serialization fails.
     #[wasm_bindgen]
     pub fn to_js_object(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.inner)
