@@ -34,6 +34,7 @@ impl JsIronShieldChallengeResponse {
     /// # Returns
     /// * `Result<String, JsValue>`: A JSON string representation of the response
     ///                              or an error if serialization fails.
+    #[wasm_bindgen]
     pub fn to_json(&self) -> Result<String, JsValue> {
         serde_json::to_string(&self.inner)
             .map_err(|e| JsValue::from_str(&format!("Failed to serialize response to JSON: {}", e)))
