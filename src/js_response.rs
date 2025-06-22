@@ -13,6 +13,7 @@ pub struct JsIronShieldChallengeResponse {
 #[wasm_bindgen]
 impl JsIronShieldChallengeResponse {
     /// Creates a new JavaScript binding for the `IronShieldChallengeResponse`.
+    /// from a JSON string.
     /// 
     /// # Arguments
     /// * `json_str`: JSON representation of the response.
