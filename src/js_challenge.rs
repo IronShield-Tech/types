@@ -13,7 +13,7 @@ pub struct JsIronShieldChallenge {
 
 #[wasm_bindgen]
 impl JsIronShieldChallenge {
-    /// Creates a new JavaScript binding for the `IronShieldChallenge`.
+    /// Creates a new JavaScript binding for the `IronShieldChallenge`
     /// from a JSON string.
     /// 
     /// # Arguments
