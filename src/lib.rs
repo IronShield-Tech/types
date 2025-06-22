@@ -10,6 +10,7 @@ mod token;
 mod crypto;
 mod js_challenge;
 mod js_response;
+mod js_token;
 
 pub use serde_utils::*;
 pub use challenge::*;
