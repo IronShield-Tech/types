@@ -8,10 +8,12 @@ mod challenge;
 mod response;
 mod token;
 mod crypto;
+mod request;
 
 pub use serde_utils::*;
 pub use challenge::*;
 pub use response::*;
+pub use request::*;
 pub use token::*;
 pub use crypto::*;
 

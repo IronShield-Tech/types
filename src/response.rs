@@ -94,6 +94,7 @@ impl IronShieldChallengeResponse {
         crate::serde_utils::concat_struct_base64url_encode(&self.concat_struct())
     }
 
+    
     /// Decodes a base64url-encoded response from an HTTP header.
     /// 
     /// This method reverses the `to_base64url_header()` operation by first base64url-decoding
