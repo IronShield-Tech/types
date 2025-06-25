@@ -7,8 +7,11 @@ description = "Shared types and utilities for the IronShield PoW system"
 license = "BUSL-1.1" # Becomes Apache-2.0 after 2028-07-24
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# Use workspace-shared serialization dependencies
+serde.workspace = true
+serde_json.workspace = true
+
+# Dependencies specific to ironshield-types
 serde-wasm-bindgen = "0.6.5"
 chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"
