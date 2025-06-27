@@ -1,3 +1,3 @@
 # IronShield Types
 
-Shared types and utilities for IronShield
+Shared enums, structs, impls, and utilities for IronShield.
