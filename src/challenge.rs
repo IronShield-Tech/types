@@ -42,13 +42,13 @@ pub struct IronShieldChallenge {
 impl IronShieldChallenge {
     /// Constructor for creating a new IronShieldChallenge instance.
     pub fn new(
-        created_time:     i64,
         website_id:       String,
         challenge_param:  [u8; 32],
         public_key:       [u8; 32],
         signature:        [u8; 64],
     ) -> Self {
         let random_nonce = Self::generate_random_nonce();
+        let created_time = Self::generate_created_time();
         
         Self {
             random_nonce,
@@ -287,7 +287,6 @@ impl IronShieldChallenge {
     /// ```
     /// use ironshield_types::IronShieldChallenge;
     /// let challenge = IronShieldChallenge::new(
-    ///     1000000,
     ///     "test_website".to_string(),
     ///     [0x12; 32],
     ///     [0x34; 32],
@@ -316,7 +315,6 @@ impl IronShieldChallenge {
     /// use ironshield_types::IronShieldChallenge;
     /// // Create a challenge and encode it
     /// let original = IronShieldChallenge::new(
-    ///     1000000,
     ///     "test_website".to_string(),
     ///     [0x12; 32],
     ///     [0x34; 32],
@@ -341,7 +339,6 @@ impl IronShieldChallenge {
     /// It automatically loads the private key and sets the public key in the challenge.
     /// 
     /// # Arguments
-    /// * `created_time` - Challenge creation timestamp
     /// * `website_id` - Website identifier
     /// * `challenge_param` - Challenge parameter for PoW difficulty
     /// 
@@ -353,13 +350,11 @@ impl IronShieldChallenge {
     /// use ironshield_types::IronShieldChallenge;
     /// 
     /// let challenge = IronShieldChallenge::create_signed(
-    ///     1700000000000,
     ///     "example.com".to_string(),
     ///     [0x12; 32],
     /// ).unwrap();
     /// ```
     pub fn create_signed(
-        created_time: i64,
         website_id: String,
         challenge_param: [u8; 32],
     ) -> Result<Self, CryptoError> {
@@ -368,7 +363,6 @@ impl IronShieldChallenge {
         
         // Create a challenge with an empty signature initially.
         let mut challenge = Self::new(
-            created_time,
             website_id,
             challenge_param,
             verifying_key.to_bytes(),
@@ -596,7 +590,6 @@ mod tests {
     fn test_base64url_header_encoding_roundtrip() {
         // Create a test challenge
         let challenge = IronShieldChallenge::new(
-            1000000,
             "test_website".to_string(),
             [0x12; 32],
             [0x34; 32],

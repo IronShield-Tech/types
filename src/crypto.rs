@@ -48,7 +48,6 @@
 //!
 //! // Create a signed challenge
 //! let challenge = IronShieldChallenge::create_signed(
-//!     chrono::Utc::now().timestamp_millis(),
 //!     "example.com".to_string(),
 //!     IronShieldChallenge::difficulty_to_challenge_param(50000),
 //! )?;
@@ -215,7 +214,6 @@ fn create_signing_message(challenge: &IronShieldChallenge) -> String {
 /// use ironshield_types::{IronShieldChallenge, sign_challenge};
 /// 
 /// let mut challenge = IronShieldChallenge::new(
-///     1000000,
 ///     "test_website".to_string(),
 ///     [0x12; 32],
 ///     [0x34; 32],
@@ -252,7 +250,6 @@ pub fn sign_challenge(challenge: &IronShieldChallenge) -> Result<[u8; 64], Crypt
 /// use ironshield_types::{IronShieldChallenge, verify_challenge_signature};
 /// 
 /// let challenge = IronShieldChallenge::new(
-///     1000000,
 ///     "test_website".to_string(),
 ///     [0x12; 32],
 ///     [0x34; 32],
@@ -414,7 +411,6 @@ mod tests {
         
         // Create a challenge with the public key
         let challenge = IronShieldChallenge::new(
-            1700000000000,
             "example.com".to_string(),
             [0xAB; 32],
             verifying_key.to_bytes(),
@@ -547,7 +543,6 @@ mod tests {
         
         // Create a test challenge with the public key embedded
         let mut challenge = IronShieldChallenge::new(
-            1000000,
             "test_website".to_string(),
             [0x12; 32],
             verifying_key.to_bytes(),
@@ -589,7 +584,6 @@ mod tests {
         
         // Create and sign a challenge
         let mut challenge = IronShieldChallenge::new(
-            1000000,
             "test_website".to_string(),
             [0x12; 32],
             verifying_key.to_bytes(),
@@ -630,7 +624,6 @@ mod tests {
         
         // Create a signed challenge
         let challenge = IronShieldChallenge::create_signed(
-            1700000000000,
             "example.com".to_string(),
             [0xAB; 32],
         ).unwrap();
@@ -639,7 +632,6 @@ mod tests {
         verify_challenge_signature(&challenge).unwrap();
         
         // Check that fields are set correctly
-        assert_eq!(challenge.created_time, 1700000000000);
         assert_eq!(challenge.website_id, "example.com");
         assert_eq!(challenge.challenge_param, [0xAB; 32]);
         assert_ne!(challenge.challenge_signature, [0u8; 64]); // Should not be empty
@@ -651,7 +643,6 @@ mod tests {
         
         // Create a valid challenge
         let challenge = IronShieldChallenge::create_signed(
-            chrono::Utc::now().timestamp_millis(),
             "example.com".to_string(),
             [0xCD; 32],
         ).unwrap();
@@ -661,7 +652,6 @@ mod tests {
         
         // Test expired challenge
         let expired_challenge = IronShieldChallenge::new(
-            1000000000, // Very old timestamp
             "example.com".to_string(),
             [0xEF; 32],
             verifying_key.to_bytes(),
@@ -691,7 +681,6 @@ mod tests {
         
         // Create a challenge with invalid signature
         let challenge = IronShieldChallenge::new(
-            1000000,
             "test_website".to_string(),
             [0x12; 32],
             [0x34; 32],
@@ -706,7 +695,6 @@ mod tests {
     #[test]
     fn test_signing_message_creation() {
         let challenge = IronShieldChallenge::new(
-            1000000,
             "test_website".to_string(),
             [0x12; 32],
             [0x34; 32],
@@ -716,7 +704,6 @@ mod tests {
         let message = create_signing_message(&challenge);
         
         // Message should contain all fields except signature
-        assert!(message.contains("1000000"));
         assert!(message.contains("test_website"));
         assert!(message.contains(&hex::encode([0x12; 32])));
         assert!(message.contains(&hex::encode([0x34; 32])));
