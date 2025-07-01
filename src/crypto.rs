@@ -12,7 +12,7 @@
 //!
 //! ### Challenge Signing
 //! - `sign_challenge()` - Sign challenges with environment private key
-//! - `create_signed_challenge()` - Create and sign challenges in one step
+//! - `IronShieldChallenge::create_signed()` - Create and sign challenges in one step
 //!
 //! ### Challenge Verification
 //! - `verify_challenge_signature()` - Verify using environment public key
@@ -48,7 +48,7 @@
 //! std::env::set_var("IRONSHIELD_PUBLIC_KEY", "your_base64_public_key");
 //!
 //! // Create a signed challenge
-//! let challenge = create_signed_challenge(
+//! let challenge = IronShieldChallenge::create_signed(
 //!     "random_nonce_123".to_string(),
 //!     chrono::Utc::now().timestamp_millis(),
 //!     "example.com".to_string(),
@@ -336,56 +336,7 @@ pub fn generate_test_keypair() -> (String, String) {
     (private_key_b64, public_key_b64)
 }
 
-/// Creates a signed challenge using environment keys
-/// 
-/// This is a convenience function that creates a challenge with proper signature.
-/// It automatically loads the private key and sets the public key in the challenge.
-/// 
-/// # Arguments
-/// * `random_nonce` - Random nonce string
-/// * `created_time` - Challenge creation timestamp
-/// * `website_id` - Website identifier
-/// * `challenge_param` - Challenge parameter for PoW difficulty
-/// 
-/// # Returns
-/// * `Result<IronShieldChallenge, CryptoError>` - Signed challenge or error
-/// 
-/// # Example
-/// ```no_run
-/// use ironshield_types::create_signed_challenge;
-/// 
-/// let challenge = create_signed_challenge(
-///     "deadbeef123".to_string(),
-///     1700000000000,
-///     "example.com".to_string(),
-///     [0x12; 32],
-/// ).unwrap();
-/// ```
-pub fn create_signed_challenge(
-    random_nonce: String,
-    created_time: i64,
-    website_id: String,
-    challenge_param: [u8; 32],
-) -> Result<IronShieldChallenge, CryptoError> {
-    // Load the public key from environment
-    let verifying_key: VerifyingKey = load_public_key_from_env()?;
-    
-    // Create challenge with empty signature initially
-    let mut challenge = IronShieldChallenge::new(
-        random_nonce,
-        created_time,
-        website_id,
-        challenge_param,
-        verifying_key.to_bytes(),
-        [0u8; 64],
-    );
-    
-    // Sign the challenge
-    let signature: [u8; 64] = sign_challenge(&challenge)?;
-    challenge.challenge_signature = signature;
-    
-    Ok(challenge)
-}
+
 
 /// Verifies a challenge and checks if it's valid and not expired
 /// 
@@ -673,7 +624,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_signed_challenge() {
+    fn test_create_signed_method() {
         let _lock = ENV_MUTEX.lock().unwrap();
         
         {
@@ -690,7 +641,7 @@ mod tests {
         }
         
         // Create a signed challenge
-        let challenge = create_signed_challenge(
+        let challenge = IronShieldChallenge::create_signed(
             "test_nonce".to_string(),
             1700000000000,
             "example.com".to_string(),
@@ -713,7 +664,7 @@ mod tests {
         let (_, verifying_key) = setup_isolated_test_keys();
         
         // Create a valid challenge
-        let challenge = create_signed_challenge(
+        let challenge = IronShieldChallenge::create_signed(
             "valid_nonce".to_string(),
             chrono::Utc::now().timestamp_millis(),
             "example.com".to_string(),

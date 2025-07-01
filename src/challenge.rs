@@ -1,4 +1,5 @@
 use crate::serde_utils::{serialize_signature, deserialize_signature, serialize_32_bytes, deserialize_32_bytes};
+use crate::crypto::{load_public_key_from_env, sign_challenge, CryptoError};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
@@ -319,6 +320,57 @@ impl IronShieldChallenge {
 
         // Parse using the existing concat_struct format.
         Self::from_concat_struct(&concat_str)
+    }
+
+    /// Creates a signed challenge using environment keys
+    /// 
+    /// This is a convenience method that creates a challenge with proper signature.
+    /// It automatically loads the private key and sets the public key in the challenge.
+    /// 
+    /// # Arguments
+    /// * `random_nonce` - Random nonce string
+    /// * `created_time` - Challenge creation timestamp
+    /// * `website_id` - Website identifier
+    /// * `challenge_param` - Challenge parameter for PoW difficulty
+    /// 
+    /// # Returns
+    /// * `Result<IronShieldChallenge, CryptoError>` - Signed challenge or error
+    /// 
+    /// # Example
+    /// ```no_run
+    /// use ironshield_types::IronShieldChallenge;
+    /// 
+    /// let challenge = IronShieldChallenge::create_signed(
+    ///     "deadbeef123".to_string(),
+    ///     1700000000000,
+    ///     "example.com".to_string(),
+    ///     [0x12; 32],
+    /// ).unwrap();
+    /// ```
+    pub fn create_signed(
+        random_nonce: String,
+        created_time: i64,
+        website_id: String,
+        challenge_param: [u8; 32],
+    ) -> Result<Self, CryptoError> {
+        // Load the public key from environment
+        let verifying_key = load_public_key_from_env()?;
+        
+        // Create challenge with empty signature initially
+        let mut challenge = Self::new(
+            random_nonce,
+            created_time,
+            website_id,
+            challenge_param,
+            verifying_key.to_bytes(),
+            [0u8; 64],
+        );
+        
+        // Sign the challenge
+        let signature = sign_challenge(&challenge)?;
+        challenge.challenge_signature = signature;
+        
+        Ok(challenge)
     }
 }
 
