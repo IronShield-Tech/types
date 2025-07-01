@@ -48,7 +48,7 @@ impl IronShieldChallenge {
         public_key:       [u8; 32],
         signature:        [u8; 64],
     ) -> Self {
-        let random_nonce = hex::encode(&rand::random::<[u8; 16]>());
+        let random_nonce = Self::generate_random_nonce();
         
         Self {
             random_nonce,
@@ -148,6 +148,18 @@ impl IronShieldChallenge {
     /// Returns the remaining time until expiration in milliseconds.
     pub fn time_until_expiration(&self) -> i64 {
         self.expiration_time - Utc::now().timestamp_millis()
+    }
+    
+    /// # Returns
+    /// - `i64`: The current time in millis.
+    pub fn generate_created_time() -> i64 {
+        Utc::now().timestamp_millis()
+    }
+
+    /// # Returns
+    /// - `String`: A random hex-encoded value.
+    pub fn generate_random_nonce() -> String {
+        hex::encode(&rand::random::<[u8; 16]>())
     }
 
     /// Returns the recommended number of attempts to expect for a given difficulty.
@@ -351,10 +363,10 @@ impl IronShieldChallenge {
         website_id: String,
         challenge_param: [u8; 32],
     ) -> Result<Self, CryptoError> {
-        // Load the public key from environment
+        // Load the public key from the environment.
         let verifying_key = load_public_key_from_env()?;
         
-        // Create challenge with empty signature initially
+        // Create a challenge with an empty signature initially.
         let mut challenge = Self::new(
             created_time,
             website_id,
