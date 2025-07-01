@@ -2,6 +2,8 @@ use crate::serde_utils::{serialize_signature, deserialize_signature, serialize_3
 use crate::crypto::{load_public_key_from_env, sign_challenge, CryptoError};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use rand;
+use hex;
 
 /// IronShield Challenge structure for the proof-of-work algorithm
 ///
@@ -40,13 +42,14 @@ pub struct IronShieldChallenge {
 impl IronShieldChallenge {
     /// Constructor for creating a new IronShieldChallenge instance.
     pub fn new(
-        random_nonce:     String,
         created_time:     i64,
         website_id:       String,
         challenge_param:  [u8; 32],
         public_key:       [u8; 32],
         signature:        [u8; 64],
     ) -> Self {
+        let random_nonce = hex::encode(&rand::random::<[u8; 16]>());
+        
         Self {
             random_nonce,
             created_time,
@@ -272,7 +275,6 @@ impl IronShieldChallenge {
     /// ```
     /// use ironshield_types::IronShieldChallenge;
     /// let challenge = IronShieldChallenge::new(
-    ///     "deadbeef".to_string(),
     ///     1000000,
     ///     "test_website".to_string(),
     ///     [0x12; 32],
@@ -302,7 +304,6 @@ impl IronShieldChallenge {
     /// use ironshield_types::IronShieldChallenge;
     /// // Create a challenge and encode it
     /// let original = IronShieldChallenge::new(
-    ///     "deadbeef".to_string(),
     ///     1000000,
     ///     "test_website".to_string(),
     ///     [0x12; 32],
@@ -328,7 +329,6 @@ impl IronShieldChallenge {
     /// It automatically loads the private key and sets the public key in the challenge.
     /// 
     /// # Arguments
-    /// * `random_nonce` - Random nonce string
     /// * `created_time` - Challenge creation timestamp
     /// * `website_id` - Website identifier
     /// * `challenge_param` - Challenge parameter for PoW difficulty
@@ -341,14 +341,12 @@ impl IronShieldChallenge {
     /// use ironshield_types::IronShieldChallenge;
     /// 
     /// let challenge = IronShieldChallenge::create_signed(
-    ///     "deadbeef123".to_string(),
     ///     1700000000000,
     ///     "example.com".to_string(),
     ///     [0x12; 32],
     /// ).unwrap();
     /// ```
     pub fn create_signed(
-        random_nonce: String,
         created_time: i64,
         website_id: String,
         challenge_param: [u8; 32],
@@ -358,7 +356,6 @@ impl IronShieldChallenge {
         
         // Create challenge with empty signature initially
         let mut challenge = Self::new(
-            random_nonce,
             created_time,
             website_id,
             challenge_param,
@@ -587,7 +584,6 @@ mod tests {
     fn test_base64url_header_encoding_roundtrip() {
         // Create a test challenge
         let challenge = IronShieldChallenge::new(
-            "deadbeef".to_string(),
             1000000,
             "test_website".to_string(),
             [0x12; 32],
