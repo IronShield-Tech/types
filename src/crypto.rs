@@ -37,26 +37,6 @@
 //!
 //! ## Usage Examples
 //!
-//! ### Server-side: Creating signed challenges
-//! ```rust,no_run
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use ironshield_types::*;
-//! 
-//! // Set environment variables with your keypair
-//! std::env::set_var("IRONSHIELD_PRIVATE_KEY", "your_base64_private_key");
-//! std::env::set_var("IRONSHIELD_PUBLIC_KEY", "your_base64_public_key");
-//!
-//! // Create a signed challenge
-//! let challenge = IronShieldChallenge::create_signed(
-//!     "example.com".to_string(),
-//!     IronShieldChallenge::difficulty_to_challenge_param(50000),
-//! )?;
-//!
-//! // Send as base64url header
-//! let header_value = challenge.to_base64url_header();
-//! # Ok(())
-//! # }
-//! ```
 //!
 //! ### Client-side: Verifying challenges  
 //! ```rust,no_run
@@ -605,62 +585,7 @@ mod tests {
         assert!(matches!(result.unwrap_err(), CryptoError::VerificationFailed(_)));
     }
 
-    #[test]
-    fn test_create_signed_method() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-        
-        {
-            use rand_core::OsRng;
-            
-            let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
-            let verifying_key: VerifyingKey = signing_key.verifying_key();
-            
-            let private_key: String = STANDARD.encode(signing_key.to_bytes());
-            let public_key: String = STANDARD.encode(verifying_key.to_bytes());
-            
-            env::set_var("IRONSHIELD_PRIVATE_KEY", &private_key);
-            env::set_var("IRONSHIELD_PUBLIC_KEY", &public_key);
-        }
-        
-        // Create a signed challenge
-        let challenge = IronShieldChallenge::create_signed(
-            "example.com".to_string(),
-            [0xAB; 32],
-        ).unwrap();
-        
-        // Verify the challenge is properly signed
-        verify_challenge_signature(&challenge).unwrap();
-        
-        // Check that fields are set correctly
-        assert_eq!(challenge.website_id, "example.com");
-        assert_eq!(challenge.challenge_param, [0xAB; 32]);
-        assert_ne!(challenge.challenge_signature, [0u8; 64]); // Should not be empty
-    }
-
-    #[test]
-    fn test_validate_challenge() {
-        let (_, verifying_key) = setup_isolated_test_keys();
-        
-        // Create a valid challenge
-        let challenge = IronShieldChallenge::create_signed(
-            "example.com".to_string(),
-            [0xCD; 32],
-        ).unwrap();
-        
-        // Should validate successfully
-        validate_challenge(&challenge).unwrap();
-        
-        // Test expired challenge
-        let expired_challenge = IronShieldChallenge::new(
-            "example.com".to_string(),
-            [0xEF; 32],
-            verifying_key.to_bytes(),
-            [0u8; 64],
-        );
-        
-        let result = validate_challenge(&expired_challenge);
-        assert!(result.is_err());
-    }
+    
 
     #[test]
     fn test_invalid_signature_format() {

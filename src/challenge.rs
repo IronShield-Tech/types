@@ -332,49 +332,6 @@ impl IronShieldChallenge {
         // Parse using the existing concat_struct format.
         Self::from_concat_struct(&concat_str)
     }
-
-    /// Creates a signed challenge using environment keys
-    /// 
-    /// This is a convenience method that creates a challenge with proper signature.
-    /// It automatically loads the private key and sets the public key in the challenge.
-    /// 
-    /// # Arguments
-    /// * `website_id` - Website identifier
-    /// * `challenge_param` - Challenge parameter for PoW difficulty
-    /// 
-    /// # Returns
-    /// * `Result<IronShieldChallenge, CryptoError>` - Signed challenge or error
-    /// 
-    /// # Example
-    /// ```no_run
-    /// use ironshield_types::IronShieldChallenge;
-    /// 
-    /// let challenge = IronShieldChallenge::create_signed(
-    ///     "example.com".to_string(),
-    ///     [0x12; 32],
-    /// ).unwrap();
-    /// ```
-    pub fn create_signed(
-        website_id: String,
-        challenge_param: [u8; 32],
-    ) -> Result<Self, CryptoError> {
-        // Load the public key from the environment.
-        let verifying_key = load_public_key_from_env()?;
-        
-        // Create a challenge with an empty signature initially.
-        let mut challenge = Self::new(
-            website_id,
-            challenge_param,
-            verifying_key.to_bytes(),
-            [0u8; 64],
-        );
-        
-        // Sign the challenge
-        let signature = sign_challenge(&challenge)?;
-        challenge.challenge_signature = signature;
-        
-        Ok(challenge)
-    }
 }
 
 #[cfg(test)]
