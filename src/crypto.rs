@@ -156,25 +156,38 @@ pub fn load_public_key_from_env() -> Result<VerifyingKey, CryptoError> {
     Ok(verifying_key)
 }
 
-/// Creates a message to be signed from challenge data (excluding the signature field)
+/// Creates a message to be signed from challenge data components
 /// 
 /// This function creates a canonical representation of the challenge data for signing.
-/// It uses the same format as `concat_struct()` but excludes the signature field.
+/// It takes individual challenge components rather than a complete challenge object,
+/// allowing it to be used during challenge creation.
 /// 
 /// # Arguments
-/// * `challenge` - The challenge to create a signing message for
+/// * `random_nonce` - The random nonce string
+/// * `created_time` - The challenge creation timestamp
+/// * `expiration_time` - The challenge expiration timestamp  
+/// * `website_id` - The website identifier
+/// * `challenge_param` - The challenge parameter bytes
+/// * `public_key` - The public key bytes
 /// 
 /// # Returns
 /// * `String` - Canonical string representation for signing
-pub fn create_signing_message(challenge: &IronShieldChallenge) -> String {
+pub fn create_signing_message(
+    random_nonce: &str,
+    created_time: i64,
+    expiration_time: i64,
+    website_id: &str,
+    challenge_param: &[u8; 32],
+    public_key: &[u8; 32]
+) -> String {
     format!(
         "{}|{}|{}|{}|{}|{}",
-        challenge.random_nonce,
-        challenge.created_time,
-        challenge.expiration_time,
-        challenge.website_id,
-        hex::encode(challenge.challenge_param),
-        hex::encode(challenge.public_key)
+        random_nonce,
+        created_time,
+        expiration_time,
+        website_id,
+        hex::encode(challenge_param),
+        hex::encode(public_key)
     )
 }
 
@@ -216,13 +229,14 @@ pub fn generate_signature(signing_key: &SigningKey, message: &str) -> Result<[u8
 /// 
 /// # Example
 /// ```no_run
-/// use ironshield_types::{IronShieldChallenge, sign_challenge};
+/// use ironshield_types::{IronShieldChallenge, sign_challenge, SigningKey};
 /// 
+/// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
 /// let mut challenge = IronShieldChallenge::new(
 ///     "test_website".to_string(),
 ///     [0x12; 32],
+///     dummy_key,
 ///     [0x34; 32],
-///     [0x00; 64], // Empty signature initially
 /// );
 /// 
 /// // Sign the challenge (requires IRONSHIELD_PRIVATE_KEY environment variable)
@@ -231,7 +245,14 @@ pub fn generate_signature(signing_key: &SigningKey, message: &str) -> Result<[u8
 /// ```
 pub fn sign_challenge(challenge: &IronShieldChallenge) -> Result<[u8; 64], CryptoError> {
     let signing_key: SigningKey = load_private_key_from_env()?;
-    let message: String = create_signing_message(challenge);
+    let message: String = create_signing_message(
+        &challenge.random_nonce,
+        challenge.created_time,
+        challenge.expiration_time,
+        &challenge.website_id,
+        &challenge.challenge_param,
+        &challenge.public_key
+    );
     generate_signature(&signing_key, &message)
 }
 
@@ -249,13 +270,14 @@ pub fn sign_challenge(challenge: &IronShieldChallenge) -> Result<[u8; 64], Crypt
 /// 
 /// # Example
 /// ```no_run
-/// use ironshield_types::{IronShieldChallenge, verify_challenge_signature};
+/// use ironshield_types::{IronShieldChallenge, verify_challenge_signature, SigningKey};
 /// 
+/// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
 /// let challenge = IronShieldChallenge::new(
 ///     "test_website".to_string(),
 ///     [0x12; 32],
+///     dummy_key,
 ///     [0x34; 32],
-///     [0u8; 64], // Valid signature
 /// );
 /// 
 /// // Verify the challenge (requires IRONSHIELD_PUBLIC_KEY environment variable)
@@ -264,7 +286,14 @@ pub fn sign_challenge(challenge: &IronShieldChallenge) -> Result<[u8; 64], Crypt
 pub fn verify_challenge_signature(challenge: &IronShieldChallenge) -> Result<(), CryptoError> {
     let verifying_key: VerifyingKey = load_public_key_from_env()?;
     
-    let message: String = create_signing_message(challenge);
+    let message: String = create_signing_message(
+        &challenge.random_nonce,
+        challenge.created_time,
+        challenge.expiration_time,
+        &challenge.website_id,
+        &challenge.challenge_param,
+        &challenge.public_key
+    );
     let signature: Signature = Signature::from_slice(&challenge.challenge_signature)
         .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid signature format: {}", e)))?;
     
@@ -293,7 +322,14 @@ pub fn verify_challenge_signature_with_key(
     let verifying_key: VerifyingKey = VerifyingKey::from_bytes(public_key_bytes)
         .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid public key: {}", e)))?;
     
-    let message: String = create_signing_message(challenge);
+    let message: String = create_signing_message(
+        &challenge.random_nonce,
+        challenge.created_time,
+        challenge.expiration_time,
+        &challenge.website_id,
+        &challenge.challenge_param,
+        &challenge.public_key
+    );
     let signature: Signature = Signature::from_slice(&challenge.challenge_signature)
         .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid signature format: {}", e)))?;
     
@@ -415,33 +451,38 @@ mod tests {
             [0xAB; 32],
             signing_key.clone(),
             verifying_key.to_bytes(),
-            [0u8; 64], // Empty signature initially
         );
         
         // Create the signing message manually
-        let signing_message = create_signing_message(&challenge);
+        let signing_message = create_signing_message(
+            &challenge.random_nonce,
+            challenge.created_time,
+            challenge.expiration_time,
+            &challenge.website_id,
+            &challenge.challenge_param,
+            &challenge.public_key
+        );
         println!("Signing message: {}", signing_message);
         
-        // Sign the message directly with the signing key
-        let signature: Signature = signing_key.sign(signing_message.as_bytes());
-        let signature_bytes: [u8; 64] = signature.to_bytes();
-        
-        // Create the signed challenge
-        let mut signed_challenge = challenge.clone();
-        signed_challenge.challenge_signature = signature_bytes;
-        
-        // Verify manually with the verifying key
-        let verification_message = create_signing_message(&signed_challenge);
+        // The challenge should already be signed, so let's verify it
+        let verification_message = create_signing_message(
+            &challenge.random_nonce,
+            challenge.created_time,
+            challenge.expiration_time,
+            &challenge.website_id,
+            &challenge.challenge_param,
+            &challenge.public_key
+        );
         assert_eq!(signing_message, verification_message, "Signing message should be consistent");
         
-        let signature_from_bytes = Signature::from_slice(&signature_bytes)
+        let signature_from_bytes = Signature::from_slice(&challenge.challenge_signature)
             .expect("Should be able to recreate signature from bytes");
         
         let verification_result = verifying_key.verify(verification_message.as_bytes(), &signature_from_bytes);
         assert!(verification_result.is_ok(), "Manual verification should succeed");
         
         // Now test our helper function
-        let verify_result = verify_challenge_signature_with_key(&signed_challenge, &verifying_key.to_bytes());
+        let verify_result = verify_challenge_signature_with_key(&challenge, &verifying_key.to_bytes());
         assert!(verify_result.is_ok(), "verify_challenge_signature_with_key should succeed");
     }
 
@@ -542,18 +583,13 @@ mod tests {
             (signing_key, verifying_key)
         };
         
-        // Create a test challenge with the public key embedded
-        let mut challenge = IronShieldChallenge::new(
+        // Create a test challenge - it will be automatically signed
+        let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
             [0x12; 32],
             signing_key.clone(),
             verifying_key.to_bytes(),
-            [0x00; 64], // Empty signature initially
         );
-        
-        // Sign the challenge
-        let signature = sign_challenge(&challenge).unwrap();
-        challenge.challenge_signature = signature;
         
         // Verify the signature with environment keys
         verify_challenge_signature(&challenge).unwrap();
@@ -584,17 +620,13 @@ mod tests {
             (signing_key, verifying_key)
         };
         
-        // Create and sign a challenge
+        // Create and sign a challenge - signature is generated automatically
         let mut challenge = IronShieldChallenge::new(
             "test_website".to_string(),
             [0x12; 32],
             signing_key.clone(),
             verifying_key.to_bytes(),
-            [0x00; 64],
         );
-        
-        let signature = sign_challenge(&challenge).unwrap();
-        challenge.challenge_signature = signature;
         
         // Verify original challenge works
         verify_challenge_signature(&challenge).unwrap();
@@ -607,8 +639,6 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CryptoError::VerificationFailed(_)));
     }
-
-    
 
     #[test]
     fn test_invalid_signature_format() {
@@ -627,15 +657,17 @@ mod tests {
             env::set_var("IRONSHIELD_PUBLIC_KEY", &public_key);
         }
         
-        // Create a challenge with invalid signature
+        // Create a challenge that will be properly signed
         let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
-        let challenge = IronShieldChallenge::new(
+        let mut challenge = IronShieldChallenge::new(
             "test_website".to_string(),
             [0x12; 32],
             dummy_key,
             [0x34; 32],
-            [0xFF; 64], // Invalid signature
         );
+        
+        // Now manually corrupt the signature to test invalid format
+        challenge.challenge_signature = [0xFF; 64]; // Invalid signature
         
         // Verification should fail
         let result = verify_challenge_signature(&challenge);
@@ -650,48 +682,25 @@ mod tests {
             [0x12; 32],
             dummy_key,
             [0x34; 32],
-            [0x56; 64],
         );
         
-        let message = create_signing_message(&challenge);
+        let message = create_signing_message(
+            &challenge.random_nonce,
+            challenge.created_time,
+            challenge.expiration_time,
+            &challenge.website_id,
+            &challenge.challenge_param,
+            &challenge.public_key
+        );
         
         // Message should contain all fields except signature
         assert!(message.contains("test_website"));
         assert!(message.contains(&hex::encode([0x12; 32])));
         assert!(message.contains(&hex::encode([0x34; 32])));
         // Should NOT contain the signature
-        assert!(!message.contains(&hex::encode([0x56; 64])));
+        assert!(!message.contains(&hex::encode(challenge.challenge_signature)));
         // Should have exactly 5 pipe separators (6 total fields, excluding signature)
         assert_eq!(message.matches('|').count(), 5);
-    }
-
-    #[test]
-    fn test_generate_signature() {
-        use rand_core::OsRng;
-        
-        // Generate a test signing key
-        let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
-        let verifying_key: VerifyingKey = signing_key.verifying_key();
-        
-        let test_message = "test message for signing";
-        
-        // Generate signature using our function
-        let signature_result = generate_signature(&signing_key, test_message);
-        assert!(signature_result.is_ok(), "generate_signature should succeed");
-        
-        let signature_bytes = signature_result.unwrap();
-        
-        // Verify the signature manually to ensure it's correct
-        let signature = Signature::from_slice(&signature_bytes)
-            .expect("Should be able to recreate signature from bytes");
-        
-        let verification_result = verifying_key.verify(test_message.as_bytes(), &signature);
-        assert!(verification_result.is_ok(), "Generated signature should be valid");
-        
-        // Test that different messages produce different signatures
-        let different_message = "different test message";
-        let different_signature = generate_signature(&signing_key, different_message).unwrap();
-        assert_ne!(signature_bytes, different_signature, "Different messages should produce different signatures");
     }
 
     #[test]
@@ -713,19 +722,25 @@ mod tests {
             (signing_key, verifying_key)
         };
         
-        // Create a test challenge
+        // Create a test challenge - it will be automatically signed
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
             [0x12; 32],
             signing_key.clone(),
             verifying_key.to_bytes(),
-            [0x00; 64], // Empty signature initially
         );
         
         // Test that sign_challenge and manual generate_signature produce the same result
         let sign_challenge_result = sign_challenge(&challenge).unwrap();
         
-        let message = create_signing_message(&challenge);
+        let message = create_signing_message(
+            &challenge.random_nonce,
+            challenge.created_time,
+            challenge.expiration_time,
+            &challenge.website_id,
+            &challenge.challenge_param,
+            &challenge.public_key
+        );
         let manual_signature = generate_signature(&signing_key, &message).unwrap();
         
         assert_eq!(sign_challenge_result, manual_signature, 

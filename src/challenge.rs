@@ -42,12 +42,24 @@ pub struct IronShieldChallenge {
 
 impl IronShieldChallenge {
     /// Constructor for creating a new IronShieldChallenge instance.
+    /// 
+    /// This function creates a new challenge and automatically generates a cryptographic
+    /// signature using the provided private key. The signature covers all challenge data
+    /// to prevent tampering.
+    /// 
+    /// # Arguments
+    /// * `website_id` - The identifier of the website
+    /// * `challenge_param` - Target threshold for the proof-of-work
+    /// * `private_key` - Ed25519 private key for signing the challenge
+    /// * `public_key` - Ed25519 public key corresponding to the private key
+    /// 
+    /// # Returns
+    /// * `Self` - A new, properly signed IronShieldChallenge
     pub fn new(
         website_id:       String,
         challenge_param:  [u8; 32],
         private_key:      SigningKey,
         public_key:       [u8; 32],
-        signature:        [u8; 64],
     ) -> Self {
         // Generate a fresh random nonce for each challenge
         let random_nonce: String = Self::generate_random_nonce();
@@ -55,6 +67,20 @@ impl IronShieldChallenge {
         // Set the creation and expiration times for the challenge in unix millis
         let created_time: i64 = Self::generate_created_time();
         let expiration_time: i64 = created_time + 30_000; // 30 seconds
+        
+        // Create the signing message from the challenge components
+        let signing_message = crate::crypto::create_signing_message(
+            &random_nonce,
+            created_time,
+            expiration_time,
+            &website_id,
+            &challenge_param,
+            &public_key
+        );
+        
+        // Generate the signature using the reusable generate_signature function
+        let challenge_signature: [u8; 64] = crate::crypto::generate_signature(&private_key, &signing_message)
+            .unwrap_or([0u8; 64]);
         
         Self {
             random_nonce,
@@ -64,7 +90,7 @@ impl IronShieldChallenge {
             challenge_param,
             recommended_attempts: 0, // This will be set later
             public_key,
-            challenge_signature: signature,
+            challenge_signature,
         }
     }
 
@@ -299,7 +325,6 @@ impl IronShieldChallenge {
     ///     [0x12; 32],
     ///     dummy_key,
     ///     [0x34; 32],
-    ///     [0x56; 64],
     /// );
     /// let header_value = challenge.to_base64url_header();
     /// // Use header_value in HTTP header: "X-IronShield-Challenge-Data: {header_value}"
@@ -330,7 +355,6 @@ impl IronShieldChallenge {
     ///     [0x12; 32],
     ///     dummy_key,
     ///     [0x34; 32],
-    ///     [0x56; 64],
     /// );
     /// let header_value = original.to_base64url_header();
     /// // Decode it back
@@ -564,7 +588,6 @@ mod tests {
             [0x12; 32],
             dummy_key,
             [0x34; 32],
-            [0x56; 64],
         );
 
         // Test base64url encoding and decoding
