@@ -4,6 +4,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use rand;
 use hex;
+use ed25519_dalek::SigningKey;
 
 /// IronShield Challenge structure for the proof-of-work algorithm
 ///
@@ -44,6 +45,7 @@ impl IronShieldChallenge {
     pub fn new(
         website_id:       String,
         challenge_param:  [u8; 32],
+        private_key:      SigningKey,
         public_key:       [u8; 32],
         signature:        [u8; 64],
     ) -> Self {
@@ -286,9 +288,12 @@ impl IronShieldChallenge {
     /// # Example
     /// ```
     /// use ironshield_types::IronShieldChallenge;
+    /// use ed25519_dalek::SigningKey;
+    /// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
     /// let challenge = IronShieldChallenge::new(
     ///     "test_website".to_string(),
     ///     [0x12; 32],
+    ///     dummy_key,
     ///     [0x34; 32],
     ///     [0x56; 64],
     /// );
@@ -313,10 +318,13 @@ impl IronShieldChallenge {
     /// # Example
     /// ```
     /// use ironshield_types::IronShieldChallenge;
+    /// use ed25519_dalek::SigningKey;
     /// // Create a challenge and encode it
+    /// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
     /// let original = IronShieldChallenge::new(
     ///     "test_website".to_string(),
     ///     [0x12; 32],
+    ///     dummy_key,
     ///     [0x34; 32],
     ///     [0x56; 64],
     /// );
@@ -546,9 +554,11 @@ mod tests {
     #[test]
     fn test_base64url_header_encoding_roundtrip() {
         // Create a test challenge
+        let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
             [0x12; 32],
+            dummy_key,
             [0x34; 32],
             [0x56; 64],
         );

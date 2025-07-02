@@ -413,6 +413,7 @@ mod tests {
         let challenge = IronShieldChallenge::new(
             "example.com".to_string(),
             [0xAB; 32],
+            signing_key.clone(),
             verifying_key.to_bytes(),
             [0u8; 64], // Empty signature initially
         );
@@ -545,6 +546,7 @@ mod tests {
         let mut challenge = IronShieldChallenge::new(
             "test_website".to_string(),
             [0x12; 32],
+            signing_key.clone(),
             verifying_key.to_bytes(),
             [0x00; 64], // Empty signature initially
         );
@@ -586,6 +588,7 @@ mod tests {
         let mut challenge = IronShieldChallenge::new(
             "test_website".to_string(),
             [0x12; 32],
+            signing_key.clone(),
             verifying_key.to_bytes(),
             [0x00; 64],
         );
@@ -625,9 +628,11 @@ mod tests {
         }
         
         // Create a challenge with invalid signature
+        let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
             [0x12; 32],
+            dummy_key,
             [0x34; 32],
             [0xFF; 64], // Invalid signature
         );
@@ -639,9 +644,11 @@ mod tests {
 
     #[test]
     fn test_signing_message_creation() {
+        let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
             [0x12; 32],
+            dummy_key,
             [0x34; 32],
             [0x56; 64],
         );
@@ -710,6 +717,7 @@ mod tests {
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
             [0x12; 32],
+            signing_key.clone(),
             verifying_key.to_bytes(),
             [0x00; 64], // Empty signature initially
         );

@@ -19,3 +19,6 @@ pub use crypto::*;
 
 // Re-export chrono for convenience
 pub use chrono;
+
+// Re-export SigningKey for convenience
+pub use ed25519_dalek::SigningKey;
