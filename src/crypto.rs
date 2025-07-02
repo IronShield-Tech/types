@@ -166,7 +166,7 @@ pub fn load_public_key_from_env() -> Result<VerifyingKey, CryptoError> {
 /// 
 /// # Returns
 /// * `String` - Canonical string representation for signing
-fn create_signing_message(challenge: &IronShieldChallenge) -> String {
+pub fn create_signing_message(challenge: &IronShieldChallenge) -> String {
     format!(
         "{}|{}|{}|{}|{}|{}",
         challenge.random_nonce,
@@ -176,6 +176,31 @@ fn create_signing_message(challenge: &IronShieldChallenge) -> String {
         hex::encode(challenge.challenge_param),
         hex::encode(challenge.public_key)
     )
+}
+
+/// Generates an Ed25519 signature for a given message using the provided signing key
+/// 
+/// This is a low-level function for generating signatures. For challenge signing,
+/// consider using `sign_challenge` which handles message creation automatically.
+/// 
+/// # Arguments
+/// * `signing_key` - The Ed25519 signing key to use
+/// * `message` - The message to sign (will be converted to bytes)
+/// 
+/// # Returns
+/// * `Result<[u8; 64], CryptoError>` - The signature bytes or an error
+/// 
+/// # Example
+/// ```no_run
+/// use ironshield_types::{generate_signature, load_private_key_from_env};
+/// 
+/// let signing_key = load_private_key_from_env()?;
+/// let signature = generate_signature(&signing_key, "message to sign")?;
+/// # Ok::<(), ironshield_types::CryptoError>(())
+/// ```
+pub fn generate_signature(signing_key: &SigningKey, message: &str) -> Result<[u8; 64], CryptoError> {
+    let signature: Signature = signing_key.sign(message.as_bytes());
+    Ok(signature.to_bytes())
 }
 
 /// Signs a challenge using the private key from environment variables
@@ -206,11 +231,8 @@ fn create_signing_message(challenge: &IronShieldChallenge) -> String {
 /// ```
 pub fn sign_challenge(challenge: &IronShieldChallenge) -> Result<[u8; 64], CryptoError> {
     let signing_key: SigningKey = load_private_key_from_env()?;
-    
     let message: String = create_signing_message(challenge);
-    let signature: Signature = signing_key.sign(message.as_bytes());
-    
-    Ok(signature.to_bytes())
+    generate_signature(&signing_key, &message)
 }
 
 /// Verifies a challenge signature using the public key from environment variables
@@ -308,8 +330,6 @@ pub fn generate_test_keypair() -> (String, String) {
     
     (private_key_b64, public_key_b64)
 }
-
-
 
 /// Verifies a challenge and checks if it's valid and not expired
 /// 
@@ -636,5 +656,71 @@ mod tests {
         assert!(!message.contains(&hex::encode([0x56; 64])));
         // Should have exactly 5 pipe separators (6 total fields, excluding signature)
         assert_eq!(message.matches('|').count(), 5);
+    }
+
+    #[test]
+    fn test_generate_signature() {
+        use rand_core::OsRng;
+        
+        // Generate a test signing key
+        let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
+        let verifying_key: VerifyingKey = signing_key.verifying_key();
+        
+        let test_message = "test message for signing";
+        
+        // Generate signature using our function
+        let signature_result = generate_signature(&signing_key, test_message);
+        assert!(signature_result.is_ok(), "generate_signature should succeed");
+        
+        let signature_bytes = signature_result.unwrap();
+        
+        // Verify the signature manually to ensure it's correct
+        let signature = Signature::from_slice(&signature_bytes)
+            .expect("Should be able to recreate signature from bytes");
+        
+        let verification_result = verifying_key.verify(test_message.as_bytes(), &signature);
+        assert!(verification_result.is_ok(), "Generated signature should be valid");
+        
+        // Test that different messages produce different signatures
+        let different_message = "different test message";
+        let different_signature = generate_signature(&signing_key, different_message).unwrap();
+        assert_ne!(signature_bytes, different_signature, "Different messages should produce different signatures");
+    }
+
+    #[test]
+    fn test_sign_challenge_uses_generate_signature() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+        
+        let (signing_key, verifying_key) = {
+            use rand_core::OsRng;
+            
+            let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
+            let verifying_key: VerifyingKey = signing_key.verifying_key();
+            
+            let private_key: String = STANDARD.encode(signing_key.to_bytes());
+            let public_key: String = STANDARD.encode(verifying_key.to_bytes());
+            
+            env::set_var("IRONSHIELD_PRIVATE_KEY", &private_key);
+            env::set_var("IRONSHIELD_PUBLIC_KEY", &public_key);
+            
+            (signing_key, verifying_key)
+        };
+        
+        // Create a test challenge
+        let challenge = IronShieldChallenge::new(
+            "test_website".to_string(),
+            [0x12; 32],
+            verifying_key.to_bytes(),
+            [0x00; 64], // Empty signature initially
+        );
+        
+        // Test that sign_challenge and manual generate_signature produce the same result
+        let sign_challenge_result = sign_challenge(&challenge).unwrap();
+        
+        let message = create_signing_message(&challenge);
+        let manual_signature = generate_signature(&signing_key, &message).unwrap();
+        
+        assert_eq!(sign_challenge_result, manual_signature, 
+                   "sign_challenge should produce the same result as manual generate_signature");
     }
 } 
