@@ -49,14 +49,18 @@ impl IronShieldChallenge {
         public_key:       [u8; 32],
         signature:        [u8; 64],
     ) -> Self {
-        let random_nonce = Self::generate_random_nonce();
-        let created_time = Self::generate_created_time();
+        // Generate a fresh random nonce for each challenge
+        let random_nonce: String = Self::generate_random_nonce();
+
+        // Set the creation and expiration times for the challenge in unix millis
+        let created_time: i64 = Self::generate_created_time();
+        let expiration_time: i64 = created_time + 30_000; // 30 seconds
         
         Self {
             random_nonce,
             created_time,
             website_id,
-            expiration_time: created_time + 30_000, // 30 seconds
+            expiration_time,
             challenge_param,
             recommended_attempts: 0, // This will be set later
             public_key,
