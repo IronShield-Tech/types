@@ -1,10 +1,11 @@
-use crate::serde_utils::{serialize_signature, deserialize_signature, serialize_32_bytes, deserialize_32_bytes};
-use crate::crypto::{load_public_key_from_env, sign_challenge, CryptoError};
+use crate::serde_utils::{deserialize_32_bytes, deserialize_signature, serialize_32_bytes, serialize_signature};
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
-use rand;
-use hex;
 use ed25519_dalek::SigningKey;
+use hex;
+use rand;
+use serde::{Deserialize, Serialize};
+
+pub const CHALLENGE_DIFFICULTY:  u64 = 60_000_000u64;
 
 /// IronShield Challenge structure for the proof-of-work algorithm
 ///
@@ -612,7 +613,7 @@ mod tests {
         assert!(result.unwrap_err().contains("Base64 decode error"));
 
         // Test valid base64url but invalid concatenated format
-        use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
         let invalid_format: String = URL_SAFE_NO_PAD.encode(b"not|enough|parts");
         let result: Result<IronShieldChallenge, String> = IronShieldChallenge::from_base64url_header(&invalid_format);
         assert!(result.is_err());
