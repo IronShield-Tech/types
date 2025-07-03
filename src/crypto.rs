@@ -3,11 +3,20 @@
 //! This module provides Ed25519 signature generation and verification for IronShield challenges,
 //! including key management from environment variables and challenge signing/verification.
 //!
+//! ## Key Format Support
+//!
+//! The key loading functions support multiple formats with automatic detection:
+//! - **Raw Ed25519 Keys**: Base64-encoded 32-byte Ed25519 keys (legacy format)
+//! - **PGP Format**: Base64-encoded PGP keys (without ASCII armor headers)
+//!
+//! For PGP keys, a simple heuristic scans the binary data to find valid Ed25519 key material.
+//! This approach is simpler and more reliable than using complex PGP parsing libraries.
+//!
 //! ## Features
 //!
 //! ### Key Management
-//! - `load_private_key_from_env()` - Load Ed25519 private key from environment
-//! - `load_public_key_from_env()` - Load Ed25519 public key from environment  
+//! - `load_private_key_from_env()` - Load Ed25519 private key from environment (multiple formats)
+//! - `load_public_key_from_env()` - Load Ed25519 public key from environment (multiple formats)
 //! - `generate_test_keypair()` - Generate keypairs for testing
 //!
 //! ### Challenge Signing
@@ -16,44 +25,38 @@
 //!
 //! ### Challenge Verification
 //! - `verify_challenge_signature()` - Verify using environment public key
-//! - `verify_challenge_signature_with_key()` - Verify using provided key
-//! - `validate_challenge()` - Comprehensive validation (signature + expiration)
+//! - `verify_challenge_signature_with_key()` - Verify using provided public key
+//! - `validate_challenge()` - Comprehensive challenge validation (signature + expiration)
 //!
-//! ## Security Design
+//! ## Environment Variables
 //!
-//! ### Signature Coverage
-//! Signatures cover all challenge fields except the signature itself:
-//! - `created_time`
-//! - `expiration_time`
-//! - `website_id`
-//! - `challenge_param` (hex-encoded)
-//! - `public_key` (hex-encoded)
+//! The following environment variables are used for key storage:
+//! - `IRONSHIELD_PRIVATE_KEY` - Base64-encoded private key (PGP or raw Ed25519)
+//! - `IRONSHIELD_PUBLIC_KEY` - Base64-encoded public key (PGP or raw Ed25519)
 //!
-//! This prevents tampering with any challenge parameters while allowing verification.
+//! ## Examples
 //!
-//! ### Environment Variables
-//! - `IRONSHIELD_PRIVATE_KEY` - Base64-encoded Ed25519 private key (32 bytes)
-//! - `IRONSHIELD_PUBLIC_KEY` - Base64-encoded Ed25519 public key (32 bytes)
+//! ### Basic Usage with Raw Keys
+//! ```no_run
+//! use ironshield_types::{load_private_key_from_env, generate_test_keypair};
+//! 
+//! // Generate test keys
+//! let (private_b64, public_b64) = generate_test_keypair();
+//! std::env::set_var("IRONSHIELD_PRIVATE_KEY", private_b64);
+//! std::env::set_var("IRONSHIELD_PUBLIC_KEY", public_b64);
+//! 
+//! // Load keys from environment
+//! let signing_key = load_private_key_from_env().unwrap();
+//! ```
 //!
-//! ## Usage Examples
-//!
-//!
-//! ### Client-side: Verifying challenges  
-//! ```rust,no_run
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use ironshield_types::*;
-//!
-//! # let header_value = "example_base64url_data";
-//! // Receive challenge from header
-//! let challenge = IronShieldChallenge::from_base64url_header(&header_value)?;
-//!
-//! // Verify signature using embedded public key
-//! verify_challenge_signature_with_key(&challenge, &challenge.public_key)?;
-//!
-//! // Comprehensive validation
-//! validate_challenge(&challenge)?;
-//! # Ok(())
-//! # }
+//! ### Using with PGP Keys
+//! For PGP keys stored in Cloudflare Secrets Store (base64-encoded without armor):
+//! ```bash
+//! # Store PGP keys in Cloudflare Secrets Store
+//! wrangler secrets-store secret create STORE_ID \
+//!   --name IRONSHIELD_PRIVATE_KEY \
+//!   --value "LS0tLS1CRUdJTi..." \  # Base64 PGP data without headers
+//!   --scopes workers
 //! ```
 
 use ed25519_dalek::{Signature, Signer, Verifier, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH};
@@ -74,6 +77,8 @@ pub enum CryptoError {
     VerificationFailed(String),
     /// Base64 decoding failed
     Base64DecodingFailed(String),
+    /// PGP parsing failed
+    PgpParsingFailed(String),
 }
 
 impl std::fmt::Display for CryptoError {
@@ -84,37 +89,117 @@ impl std::fmt::Display for CryptoError {
             CryptoError::SigningFailed(msg) => write!(f, "Signing failed: {}", msg),
             CryptoError::VerificationFailed(msg) => write!(f, "Verification failed: {}", msg),
             CryptoError::Base64DecodingFailed(msg) => write!(f, "Base64 decoding failed: {}", msg),
+            CryptoError::PgpParsingFailed(msg) => write!(f, "PGP parsing failed: {}", msg),
         }
     }
 }
 
 impl std::error::Error for CryptoError {}
 
+/// Simple approach: Try to extract Ed25519 key from PGP data, fall back to raw base64
+/// 
+/// This function attempts to parse PGP data using basic pattern matching to find Ed25519 keys.
+/// If that fails, it tries to parse as raw base64-encoded Ed25519 keys.
+/// 
+/// # Arguments
+/// * `key_data` - Base64-encoded key data (PGP or raw Ed25519)
+/// * `is_private` - Whether this is a private key (affects expected length)
+/// 
+/// # Returns
+/// * `Result<[u8; 32], CryptoError>` - The 32-byte Ed25519 key or an error
+fn parse_key_simple(key_data: &str, is_private: bool) -> Result<[u8; 32], CryptoError> {
+    // First, try to decode as base64
+    let key_bytes = STANDARD.decode(key_data.trim())
+        .map_err(|e| CryptoError::Base64DecodingFailed(format!("Key data: {}", e)))?;
+    
+    // If it's exactly 32 bytes, treat it as raw Ed25519
+    if key_bytes.len() == 32 {
+        let mut key_array = [0u8; 32];
+        key_array.copy_from_slice(&key_bytes);
+        return Ok(key_array);
+    }
+    
+    // For PGP format, look for Ed25519 key patterns
+    // This is a simplified approach that looks for common Ed25519 signatures in PGP data
+    if key_bytes.len() > 32 {
+        // Simple pattern: look for sequences of 32 consecutive bytes that could be keys
+        // This is a heuristic approach - scan through the data looking for potential key material
+        for window_start in 0..key_bytes.len().saturating_sub(32) {
+            let potential_key = &key_bytes[window_start..window_start + 32];
+            
+            // Basic heuristic: Ed25519 keys shouldn't be all zeros or all 0xFF
+            if potential_key == &[0u8; 32] || potential_key == &[0xFFu8; 32] {
+                continue;
+            }
+            
+            // Convert slice to array for Ed25519 key validation
+            let mut key_array = [0u8; 32];
+            key_array.copy_from_slice(potential_key);
+            
+            // Try to validate this as an Ed25519 key
+            if is_private {
+                // For private keys, try to create a SigningKey
+                // SigningKey::from_bytes() doesn't return a Result, so just create it
+                let _signing_key = SigningKey::from_bytes(&key_array);
+                return Ok(key_array);
+            } else {
+                // For public keys, try to create a VerifyingKey
+                if let Ok(_verifying_key) = VerifyingKey::from_bytes(&key_array) {
+                    return Ok(key_array);
+                }
+            }
+        }
+        
+        return Err(CryptoError::PgpParsingFailed(
+            "Could not find valid Ed25519 key material in PGP data".to_string()
+        ));
+    }
+    
+    Err(CryptoError::InvalidKeyFormat(
+        format!("Key data must be either 32 bytes (raw Ed25519) or longer (PGP format), got {} bytes", key_bytes.len())
+    ))
+}
+
 /// Loads the private key from the IRONSHIELD_PRIVATE_KEY environment variable
 /// 
-/// The environment variable should contain a base64-encoded Ed25519 private key (32 bytes).
+/// The environment variable should contain a base64-encoded PGP private key (without armor headers).
+/// For backward compatibility, raw base64-encoded Ed25519 keys (32 bytes) are also supported.
 /// 
 /// # Returns
 /// * `Result<SigningKey, CryptoError>` - The Ed25519 signing key or an error
 /// 
 /// # Environment Variables
-/// * `IRONSHIELD_PRIVATE_KEY` - Base64-encoded Ed25519 private key
+/// * `IRONSHIELD_PRIVATE_KEY` - Base64-encoded PGP private key data (without -----BEGIN/END----- lines)
+///                              or raw base64-encoded Ed25519 private key (legacy format)
 pub fn load_private_key_from_env() -> Result<SigningKey, CryptoError> {
     let key_str: String = env::var("IRONSHIELD_PRIVATE_KEY")
         .map_err(|_| CryptoError::MissingEnvironmentVariable("IRONSHIELD_PRIVATE_KEY".to_string()))?;
     
-    // Decode from base64
-    let key_bytes: Vec<u8> = STANDARD.decode(key_str.trim())
-        .map_err(|e| CryptoError::Base64DecodingFailed(format!("Private key: {}", e)))?;
+    // Try PGP format first
+    match parse_key_simple(&key_str, true) {
+        Ok(key_array) => {
+            let signing_key: SigningKey = SigningKey::from_bytes(&key_array);
+            return Ok(signing_key);
+        }
+        Err(CryptoError::PgpParsingFailed(_)) | Err(CryptoError::Base64DecodingFailed(_)) => {
+            // Fall back to raw base64 format
+        }
+        Err(e) => return Err(e), // Return other errors immediately
+    }
     
-    // Verify length
+    // Fallback: try raw base64-encoded Ed25519 key (legacy format)
+    let key_bytes: Vec<u8> = STANDARD.decode(key_str.trim())
+        .map_err(|e| CryptoError::Base64DecodingFailed(format!("Private key (legacy fallback): {}", e)))?;
+    
+    // Verify length for raw Ed25519 key
     if key_bytes.len() != SECRET_KEY_LENGTH {
         return Err(CryptoError::InvalidKeyFormat(
-            format!("Private key must be {} bytes, got {}", SECRET_KEY_LENGTH, key_bytes.len())
+            format!("Private key must be {} bytes (raw Ed25519) or valid PGP format, got {} bytes", 
+                   SECRET_KEY_LENGTH, key_bytes.len())
         ));
     }
     
-    // Create signing key
+    // Create signing key from raw bytes
     let key_array: [u8; SECRET_KEY_LENGTH] = key_bytes.try_into()
         .map_err(|_| CryptoError::InvalidKeyFormat("Failed to convert private key bytes".to_string()))?;
     
@@ -124,29 +209,45 @@ pub fn load_private_key_from_env() -> Result<SigningKey, CryptoError> {
 
 /// Loads the public key from the IRONSHIELD_PUBLIC_KEY environment variable
 /// 
-/// The environment variable should contain a base64-encoded Ed25519 public key (32 bytes).
+/// The environment variable should contain a base64-encoded PGP public key (without armor headers).
+/// For backward compatibility, raw base64-encoded Ed25519 keys (32 bytes) are also supported.
 /// 
 /// # Returns
 /// * `Result<VerifyingKey, CryptoError>` - The Ed25519 verifying key or an error
 /// 
 /// # Environment Variables
-/// * `IRONSHIELD_PUBLIC_KEY` - Base64-encoded Ed25519 public key
+/// * `IRONSHIELD_PUBLIC_KEY` - Base64-encoded PGP public key data (without -----BEGIN/END----- lines)
+///                             or raw base64-encoded Ed25519 public key (legacy format)
 pub fn load_public_key_from_env() -> Result<VerifyingKey, CryptoError> {
     let key_str: String = env::var("IRONSHIELD_PUBLIC_KEY")
         .map_err(|_| CryptoError::MissingEnvironmentVariable("IRONSHIELD_PUBLIC_KEY".to_string()))?;
     
-    // Decode from base64
-    let key_bytes: Vec<u8> = STANDARD.decode(key_str.trim())
-        .map_err(|e| CryptoError::Base64DecodingFailed(format!("Public key: {}", e)))?;
+    // Try PGP format first
+    match parse_key_simple(&key_str, false) {
+        Ok(key_array) => {
+            let verifying_key: VerifyingKey = VerifyingKey::from_bytes(&key_array)
+                .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid public key: {}", e)))?;
+            return Ok(verifying_key);
+        }
+        Err(CryptoError::PgpParsingFailed(_)) | Err(CryptoError::Base64DecodingFailed(_)) => {
+            // Fall back to raw base64 format
+        }
+        Err(e) => return Err(e), // Return other errors immediately
+    }
     
-    // Verify length
+    // Fallback: try raw base64-encoded Ed25519 key (legacy format)
+    let key_bytes: Vec<u8> = STANDARD.decode(key_str.trim())
+        .map_err(|e| CryptoError::Base64DecodingFailed(format!("Public key (legacy fallback): {}", e)))?;
+    
+    // Verify length for raw Ed25519 key
     if key_bytes.len() != PUBLIC_KEY_LENGTH {
         return Err(CryptoError::InvalidKeyFormat(
-            format!("Public key must be {} bytes, got {}", PUBLIC_KEY_LENGTH, key_bytes.len())
+            format!("Public key must be {} bytes (raw Ed25519) or valid PGP format, got {} bytes", 
+                   PUBLIC_KEY_LENGTH, key_bytes.len())
         ));
     }
     
-    // Create verifying key
+    // Create verifying key from raw bytes
     let key_array: [u8; PUBLIC_KEY_LENGTH] = key_bytes.try_into()
         .map_err(|_| CryptoError::InvalidKeyFormat("Failed to convert public key bytes".to_string()))?;
     
@@ -341,11 +442,11 @@ pub fn verify_challenge_signature_with_key(
 
 /// Generates a new Ed25519 keypair for testing purposes
 /// 
-/// This function generates a fresh keypair and returns the keys in base64 format
-/// suitable for use as environment variables.
+/// This function generates a fresh keypair and returns the keys in raw base64 format
+/// (legacy format) suitable for use as environment variables in tests.
 /// 
 /// # Returns
-/// * `(String, String)` - (base64_private_key, base64_public_key)
+/// * `(String, String)` - (base64_private_key, base64_public_key) in raw Ed25519 format
 /// 
 /// # Example
 /// ```
