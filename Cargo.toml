@@ -24,6 +24,11 @@ serde-wasm-bindgen.workspace = true
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 rand = "0.8"
+web-sys = { version = "0.3", features = ["console"], optional = true }
+
+[features]
+default = []
+wasm-logging = ["web-sys"]
 
 [lib]
 name = "ironshield_types"

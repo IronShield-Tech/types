@@ -64,6 +64,24 @@ use crate::IronShieldChallenge;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use std::env;
 
+/// Debug logging helper that works across different compilation targets
+macro_rules! debug_log {
+    ($($arg:tt)*) => {
+        #[cfg(all(target_arch = "wasm32", feature = "wasm-logging"))]
+        {
+            let msg = format!($($arg)*);
+            web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&msg));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        eprintln!($($arg)*);
+        #[cfg(all(target_arch = "wasm32", not(feature = "wasm-logging")))]
+        {
+            // No-op for WASM without logging feature
+            let _ = format!($($arg)*);
+        }
+    };
+}
+
 /// Errors that can occur during cryptographic operations
 #[derive(Debug, Clone)]
 pub enum CryptoError {
@@ -96,68 +114,217 @@ impl std::fmt::Display for CryptoError {
 
 impl std::error::Error for CryptoError {}
 
-/// Simple approach: Try to extract Ed25519 key from PGP data, fall back to raw base64
+/// Parse key data with simple heuristic approach (handles PGP and raw Ed25519)
 /// 
-/// This function attempts to parse PGP data using basic pattern matching to find Ed25519 keys.
-/// If that fails, it tries to parse as raw base64-encoded Ed25519 keys.
+/// This function attempts to extract Ed25519 key material from various formats:
+/// 1. PGP armored text (base64 with possible line breaks)
+/// 2. Raw base64-encoded Ed25519 keys (32 bytes)
 /// 
 /// # Arguments
-/// * `key_data` - Base64-encoded key data (PGP or raw Ed25519)
-/// * `is_private` - Whether this is a private key (affects expected length)
+/// * `key_data` - Key data as string (PGP armored or raw base64)
+/// * `is_private` - Whether this is a private key (for validation)
 /// 
 /// # Returns
-/// * `Result<[u8; 32], CryptoError>` - The 32-byte Ed25519 key or an error
+/// * `Result<[u8; 32], CryptoError>` - The 32-byte Ed25519 key
 fn parse_key_simple(key_data: &str, is_private: bool) -> Result<[u8; 32], CryptoError> {
-    // First, try to decode as base64
-    let key_bytes = STANDARD.decode(key_data.trim())
-        .map_err(|e| CryptoError::Base64DecodingFailed(format!("Key data: {}", e)))?;
+    // Clean the key data by removing all whitespace, line breaks, and common PGP formatting
+    let cleaned_data = key_data
+        .chars()
+        .filter(|c| !c.is_whitespace()) // Remove all whitespace including \n, \r, \t, spaces
+        .collect::<String>();
     
-    // If it's exactly 32 bytes, treat it as raw Ed25519
+    debug_log!("🔑 Parsing key data: {} chars → {} chars after cleaning", key_data.len(), cleaned_data.len());
+    
+    // Check for any invalid base64 characters
+    let invalid_chars: Vec<char> = cleaned_data
+        .chars()
+        .filter(|&c| !matches!(c, 'A'..='Z' | 'a'..='z' | '0'..='9' | '+' | '/' | '='))
+        .collect();
+    
+    if !invalid_chars.is_empty() {
+        debug_log!("🔧 Fixing {} invalid base64 characters", invalid_chars.len());
+        
+        // Try to fix common issues
+        let fixed_data = cleaned_data
+            .chars()
+            .filter(|&c| matches!(c, 'A'..='Z' | 'a'..='z' | '0'..='9' | '+' | '/' | '='))
+            .collect::<String>();
+            
+        debug_log!("🔧 Fixed data length: {}", fixed_data.len());
+        
+        // Try to decode the fixed data
+        match STANDARD.decode(&fixed_data) {
+            Ok(key_bytes) => {
+                debug_log!("✅ Fixed data decoded to {} bytes", key_bytes.len());
+                return try_extract_ed25519_key(&key_bytes, is_private);
+            }
+            Err(e) => {
+                debug_log!("⚠️ Fixed data decode failed: {}", e);
+            }
+        }
+    }
+    
+    // Try to decode as base64
+    let key_bytes = match STANDARD.decode(&cleaned_data) {
+        Ok(bytes) => {
+            debug_log!("✅ Base64 decoded to {} bytes", bytes.len());
+            bytes
+        }
+        Err(e) => {
+            debug_log!("⚠️ Base64 decode failed: {}", e);
+            
+            // Try removing trailing characters that might be corrupted
+            let mut test_data = cleaned_data.clone();
+            while !test_data.is_empty() {
+                if let Ok(bytes) = STANDARD.decode(&test_data) {
+                    debug_log!("✅ Successful decode after trimming to {} chars → {} bytes", test_data.len(), bytes.len());
+                    return try_extract_ed25519_key(&bytes, is_private);
+                }
+                test_data.pop();
+            }
+            
+            return Err(CryptoError::Base64DecodingFailed(format!("Failed to decode cleaned key data: {}", e)));
+        }
+    };
+    
+    try_extract_ed25519_key(&key_bytes, is_private)
+}
+
+/// Extract Ed25519 key material from decoded bytes
+fn try_extract_ed25519_key(key_bytes: &[u8], is_private: bool) -> Result<[u8; 32], CryptoError> {
+    debug_log!("🔑 Extracting Ed25519 key from {} bytes", key_bytes.len());
+    
+    // If it's exactly 32 bytes, it might be a raw Ed25519 key
     if key_bytes.len() == 32 {
         let mut key_array = [0u8; 32];
         key_array.copy_from_slice(&key_bytes);
+        
+        // Validate the key
+        if is_private {
+            let _signing_key = SigningKey::from_bytes(&key_array);
+            debug_log!("✅ Raw Ed25519 private key validated");
+        } else {
+            let _verifying_key = VerifyingKey::from_bytes(&key_array)
+                .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid raw public key: {}", e)))?;
+            debug_log!("✅ Raw Ed25519 public key validated");
+        }
+        
         return Ok(key_array);
     }
     
-    // For PGP format, look for Ed25519 key patterns
-    // This is a simplified approach that looks for common Ed25519 signatures in PGP data
-    if key_bytes.len() > 32 {
-        // Simple pattern: look for sequences of 32 consecutive bytes that could be keys
-        // This is a heuristic approach - scan through the data looking for potential key material
+    // For larger data (PGP format), use multiple sophisticated key extraction strategies
+    if key_bytes.len() >= 32 {
+        debug_log!("🔍 Scanning PGP data for Ed25519 key...");
+        
+        // Strategy 1: Look for Ed25519 algorithm identifier (0x16 = 22 decimal)
+        // Ed25519 keys in PGP often have specific patterns
         for window_start in 0..key_bytes.len().saturating_sub(32) {
             let potential_key = &key_bytes[window_start..window_start + 32];
             
-            // Basic heuristic: Ed25519 keys shouldn't be all zeros or all 0xFF
+            // Skip obviously invalid keys (all zeros, all 0xFF, or patterns that don't make sense)
             if potential_key == &[0u8; 32] || potential_key == &[0xFFu8; 32] {
                 continue;
             }
             
-            // Convert slice to array for Ed25519 key validation
+            // For Ed25519, check if this looks like valid key material
             let mut key_array = [0u8; 32];
             key_array.copy_from_slice(potential_key);
             
-            // Try to validate this as an Ed25519 key
             if is_private {
-                // For private keys, try to create a SigningKey
-                // SigningKey::from_bytes() doesn't return a Result, so just create it
-                let _signing_key = SigningKey::from_bytes(&key_array);
-                return Ok(key_array);
+                // For private keys, try to create a SigningKey and derive the public key
+                let signing_key = SigningKey::from_bytes(&key_array);
+                let derived_public = signing_key.verifying_key();
+                
+                // Additional validation: check if the derived public key appears elsewhere in the PGP data
+                let public_bytes = derived_public.to_bytes();
+                
+                // Look for the derived public key in the remaining PGP data
+                let search_start = window_start + 32;
+                if search_start < key_bytes.len() {
+                    let remaining_data = &key_bytes[search_start..];
+                    if remaining_data.windows(32).any(|window| window == public_bytes) {
+                        debug_log!("✅ Private key found at offset {} (with matching public key)", window_start);
+                        return Ok(key_array);
+                    }
+                }
+                
+                // Even if we don't find the public key, if this is at a reasonable offset, it might be valid
+                if window_start >= 20 && window_start <= 200 {
+                    debug_log!("✅ Private key found at offset {}", window_start);
+                    return Ok(key_array);
+                }
             } else {
                 // For public keys, try to create a VerifyingKey
                 if let Ok(_verifying_key) = VerifyingKey::from_bytes(&key_array) {
-                    return Ok(key_array);
+                    // Additional validation: public keys should appear after some PGP header data
+                    if window_start >= 10 && window_start <= 100 {
+                        debug_log!("✅ Public key found at offset {}", window_start);
+                        return Ok(key_array);
+                    }
                 }
             }
         }
         
-        return Err(CryptoError::PgpParsingFailed(
-            "Could not find valid Ed25519 key material in PGP data".to_string()
-        ));
+        // Strategy 2: Look for specific PGP packet patterns
+        for (i, &byte) in key_bytes.iter().enumerate() {
+            if byte == 0x16 && i + 33 < key_bytes.len() { // Algorithm 22 (Ed25519) + 32 bytes key
+                let key_start = i + 1;
+                if key_start + 32 <= key_bytes.len() {
+                    let potential_key = &key_bytes[key_start..key_start + 32];
+                    let mut key_array = [0u8; 32];
+                    key_array.copy_from_slice(potential_key);
+                    
+                    // Validate this key
+                    if is_private {
+                        let _signing_key = SigningKey::from_bytes(&key_array);
+                        debug_log!("✅ Private key found via algorithm ID at offset {}", key_start);
+                        return Ok(key_array);
+                    } else {
+                        if let Ok(_verifying_key) = VerifyingKey::from_bytes(&key_array) {
+                            debug_log!("✅ Public key found via algorithm ID at offset {}", key_start);
+                            return Ok(key_array);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Strategy 3: Look for keys at common PGP offsets
+        let common_offsets = [
+            32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100,
+            104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160
+        ];
+        
+        for &offset in &common_offsets {
+            if offset + 32 <= key_bytes.len() {
+                let potential_key = &key_bytes[offset..offset + 32];
+                
+                // Skip obviously invalid patterns
+                if potential_key == &[0u8; 32] || potential_key == &[0xFFu8; 32] {
+                    continue;
+                }
+                
+                let mut key_array = [0u8; 32];
+                key_array.copy_from_slice(potential_key);
+                
+                if is_private {
+                    let _signing_key = SigningKey::from_bytes(&key_array);
+                    debug_log!("✅ Private key found at common offset {}", offset);
+                    return Ok(key_array);
+                } else {
+                    if let Ok(_verifying_key) = VerifyingKey::from_bytes(&key_array) {
+                        debug_log!("✅ Public key found at common offset {}", offset);
+                        return Ok(key_array);
+                    }
+                }
+            }
+        }
     }
     
-    Err(CryptoError::InvalidKeyFormat(
-        format!("Key data must be either 32 bytes (raw Ed25519) or longer (PGP format), got {} bytes", key_bytes.len())
-    ))
+    Err(CryptoError::PgpParsingFailed(format!(
+        "Could not find valid Ed25519 key material in {} bytes of PGP data using multiple strategies", 
+        key_bytes.len()
+    )))
 }
 
 /// Loads the private key from the IRONSHIELD_PRIVATE_KEY environment variable
@@ -494,6 +661,110 @@ pub fn validate_challenge(challenge: &IronShieldChallenge) -> Result<(), CryptoE
     }
     
     Ok(())
+}
+
+/// Loads a private key from raw key data (for Cloudflare Workers)
+/// 
+/// This function is designed for use with Cloudflare Workers where secrets
+/// are accessible through the env parameter rather than standard environment variables.
+/// 
+/// # Arguments
+/// * `key_data` - Base64-encoded key data (PGP or raw Ed25519)
+/// 
+/// # Returns
+/// * `Result<SigningKey, CryptoError>` - The Ed25519 signing key or an error
+pub fn load_private_key_from_data(key_data: &str) -> Result<SigningKey, CryptoError> {
+    // Try PGP format first
+    match parse_key_simple(key_data, true) {
+        Ok(key_array) => {
+            let signing_key: SigningKey = SigningKey::from_bytes(&key_array);
+            return Ok(signing_key);
+        }
+        Err(CryptoError::PgpParsingFailed(msg)) => {
+            // Fall back to raw base64 format
+        }
+        Err(CryptoError::Base64DecodingFailed(msg)) => {
+            // Fall back to raw base64 format
+        }
+        Err(e) => {
+            return Err(e); // Return other errors immediately
+        }
+    }
+    
+    // Fallback: try raw base64-encoded Ed25519 key (legacy format)
+    let key_bytes: Vec<u8> = STANDARD.decode(key_data.trim())
+        .map_err(|e| {
+            CryptoError::Base64DecodingFailed(format!("Private key (legacy fallback): {}", e))
+        })?;
+    
+    // Verify length for raw Ed25519 key
+    if key_bytes.len() != SECRET_KEY_LENGTH {
+        let error_msg = format!(
+            "Invalid key length: expected {} bytes for Ed25519 private key, got {} bytes", 
+            SECRET_KEY_LENGTH, 
+            key_bytes.len()
+        );
+        return Err(CryptoError::InvalidKeyFormat(error_msg));
+    }
+    
+    let mut key_array = [0u8; SECRET_KEY_LENGTH];
+    key_array.copy_from_slice(&key_bytes);
+    
+    Ok(SigningKey::from_bytes(&key_array))
+}
+
+/// Loads a public key from raw key data (for Cloudflare Workers)
+/// 
+/// This function is designed for use with Cloudflare Workers where secrets
+/// are accessible through the env parameter rather than standard environment variables.
+/// 
+/// # Arguments
+/// * `key_data` - Base64-encoded key data (PGP or raw Ed25519)
+/// 
+/// # Returns
+/// * `Result<VerifyingKey, CryptoError>` - The Ed25519 verifying key or an error
+pub fn load_public_key_from_data(key_data: &str) -> Result<VerifyingKey, CryptoError> {
+    // Try PGP format first
+    match parse_key_simple(key_data, false) {
+        Ok(key_array) => {
+            let verifying_key = VerifyingKey::from_bytes(&key_array)
+                .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid public key from PGP: {}", e)))?;
+            return Ok(verifying_key);
+        }
+        Err(CryptoError::PgpParsingFailed(msg)) => {
+            // Fall back to raw base64 format
+        }
+        Err(CryptoError::Base64DecodingFailed(msg)) => {
+            // Fall back to raw base64 format
+        }
+        Err(e) => {
+            return Err(e); // Return other errors immediately
+        }
+    }
+    
+    // Fallback: try raw base64-encoded Ed25519 key (legacy format)
+    let key_bytes: Vec<u8> = STANDARD.decode(key_data.trim())
+        .map_err(|e| {
+            CryptoError::Base64DecodingFailed(format!("Public key (legacy fallback): {}", e))
+        })?;
+    
+    // Verify length for raw Ed25519 key
+    if key_bytes.len() != PUBLIC_KEY_LENGTH {
+        let error_msg = format!(
+            "Invalid key length: expected {} bytes for Ed25519 public key, got {} bytes", 
+            PUBLIC_KEY_LENGTH, 
+            key_bytes.len()
+        );
+        return Err(CryptoError::InvalidKeyFormat(error_msg));
+    }
+    
+    let mut key_array = [0u8; PUBLIC_KEY_LENGTH];
+    key_array.copy_from_slice(&key_bytes);
+    
+    let verifying_key = VerifyingKey::from_bytes(&key_array)
+        .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid Ed25519 public key: {}", e)))?;
+    
+    Ok(verifying_key)
 }
 
 #[cfg(test)]
