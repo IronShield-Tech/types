@@ -1,25 +1,21 @@
-use crate::serde_utils::{serialize_signature, deserialize_signature};
 use serde::{Deserialize, Serialize};
+use crate::IronShieldChallenge;
 
 /// IronShield Challenge Response structure
 /// 
-/// * `challenge_signature`: The Ed25519 signature of the challenge (copied from challenge).
-/// * `solution`:            The nonce solution found by the proof-of-work algorithm.
+/// * `solved_challenge`: The complete original IronShieldChallenge that was solved.
+/// * `solution`:         The nonce solution found by the proof-of-work algorithm.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IronShieldChallengeResponse {
-    #[serde(
-        serialize_with = "serialize_signature",
-        deserialize_with = "deserialize_signature"
-    )]
-    pub challenge_signature: [u8; 64],
-    pub solution:            i64,
+    pub solved_challenge: IronShieldChallenge,
+    pub solution:         i64,
 }
 
 impl IronShieldChallengeResponse {
     /// Constructor for creating a new IronShieldChallengeResponse instance.
-    pub fn new(challenge_signature: [u8; 64], solution: i64) -> Self {
+    pub fn new(solved_challenge: IronShieldChallenge, solution: i64) -> Self {
         Self {
-            challenge_signature,
+            solved_challenge,
             solution,
         }
     }
@@ -27,15 +23,12 @@ impl IronShieldChallengeResponse {
     /// Concatenates the response data into a string.
     ///
     /// Concatenates:
-    /// - `challenge_signature` as a lowercase hex string.
-    /// - `solution`:           as a string.
+    /// - `solved_challenge` as its concatenated string representation.
+    /// - `solution`:        as a string.
     pub fn concat_struct(&self) -> String {
         format!(
             "{}|{}",
-            // Use of hex::encode to convert the signature to a hex string
-            // "Encodes data as hex string using lowercase characters."
-            // Requirement of `format!`.
-            hex::encode(self.challenge_signature),
+            self.solved_challenge.concat_struct(),
             self.solution
         )
     }
@@ -44,7 +37,7 @@ impl IronShieldChallengeResponse {
     ///
     /// This function reverses the operation of
     /// `IronShieldChallengeResponse::concat_struct`.
-    /// Expects a string in the format: "hex_signature|solution".
+    /// Expects a string in the format: "challenge_concat_string|solution".
     ///
     /// # Arguments
     /// * `concat_string`: The concatenated string to parse, typically
@@ -55,22 +48,19 @@ impl IronShieldChallengeResponse {
     ///                           `IronShieldChallengeResponse`
     ///                           or an error message if parsing fails.
     pub fn from_concat_struct(concat_string: &str) -> Result<Self, String> {
-        let parts: Vec<&str> = concat_string.split('|').collect();
-
-        if parts.len() != 2 {
-            return Err(format!("Expected 2 parts, got {}", parts.len()));
-        }
-
-        let signature_bytes = hex::decode(parts[0])
-            .map_err(|_| "Failed to decode challenge_signature hex string")?;
-        let challenge_signature: [u8; 64] = signature_bytes.try_into()
-            .map_err(|_| "Challenge signature must be exactly 64 bytes")?;
+        // Split on the last '|' to separate challenge from solution
+        let last_pipe_pos = concat_string.rfind('|')
+            .ok_or("Expected at least one '|' separator")?;
         
-        let solution = parts[1].parse::<i64>()
+        let challenge_part = &concat_string[..last_pipe_pos];
+        let solution_part = &concat_string[last_pipe_pos + 1..];
+        
+        let solved_challenge = IronShieldChallenge::from_concat_struct(challenge_part)?;
+        let solution = solution_part.parse::<i64>()
             .map_err(|_| "Failed to parse solution as i64")?;
 
         Ok(Self {
-            challenge_signature,
+            solved_challenge,
             solution,
         })
     }
@@ -85,8 +75,10 @@ impl IronShieldChallengeResponse {
     /// 
     /// # Example
     /// ```
-    /// use ironshield_types::IronShieldChallengeResponse;
-    /// let response = IronShieldChallengeResponse::new([0xAB; 64], 12345);
+    /// use ironshield_types::{IronShieldChallengeResponse, IronShieldChallenge, SigningKey};
+    /// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
+    /// let challenge = IronShieldChallenge::new("test".to_string(), [0x12; 32], dummy_key, [0x34; 32]);
+    /// let response = IronShieldChallengeResponse::new(challenge, 12345);
     /// let header_value = response.to_base64url_header();
     /// // Use header_value in HTTP header: "X-IronShield-Challenge-Response: {header_value}"
     /// ```
@@ -108,9 +100,11 @@ impl IronShieldChallengeResponse {
     /// 
     /// # Example
     /// ```
-    /// use ironshield_types::IronShieldChallengeResponse;
+    /// use ironshield_types::{IronShieldChallengeResponse, IronShieldChallenge, SigningKey};
+    /// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
+    /// let challenge = IronShieldChallenge::new("test".to_string(), [0x12; 32], dummy_key, [0x34; 32]);
     /// // Create a response and encode it
-    /// let original = IronShieldChallengeResponse::new([0xAB; 64], 12345);
+    /// let original = IronShieldChallengeResponse::new(challenge, 12345);
     /// let header_value = original.to_base64url_header();
     /// // Decode it back
     /// let decoded = IronShieldChallengeResponse::from_base64url_header(&header_value).unwrap();
@@ -128,18 +122,30 @@ impl IronShieldChallengeResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SigningKey;
 
     #[test]
     fn test_response_base64url_header_encoding_roundtrip() {
-        // Create a test response.
-        let response: IronShieldChallengeResponse = IronShieldChallengeResponse::new([0xAB; 64], 12345);
+        // Create a test challenge and response.
+        let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
+        let challenge = IronShieldChallenge::new(
+            "test_website".to_string(),
+            [0x12; 32],
+            dummy_key,
+            [0x34; 32],
+        );
+        let response: IronShieldChallengeResponse = IronShieldChallengeResponse::new(challenge, 12345);
 
         // Test base64url encoding and decoding.
         let encoded: String = response.to_base64url_header();
         let decoded: IronShieldChallengeResponse = IronShieldChallengeResponse::from_base64url_header(&encoded).unwrap();
 
         // Verify all fields are preserved through a round-trip.
-        assert_eq!(response.challenge_signature, decoded.challenge_signature);
+        assert_eq!(response.solved_challenge.random_nonce, decoded.solved_challenge.random_nonce);
+        assert_eq!(response.solved_challenge.website_id, decoded.solved_challenge.website_id);
+        assert_eq!(response.solved_challenge.challenge_param, decoded.solved_challenge.challenge_param);
+        assert_eq!(response.solved_challenge.public_key, decoded.solved_challenge.public_key);
+        assert_eq!(response.solved_challenge.challenge_signature, decoded.solved_challenge.challenge_signature);
         assert_eq!(response.solution, decoded.solution);
     }
 
@@ -155,55 +161,90 @@ mod tests {
         let invalid_format: String = URL_SAFE_NO_PAD.encode(b"only_one_part");
         let result: Result<IronShieldChallengeResponse, String> = IronShieldChallengeResponse::from_base64url_header(&invalid_format);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Expected 2 parts"));
+        assert!(result.unwrap_err().contains("Expected at least one '|' separator"));
     }
 
     #[test]
     fn test_concat_struct() {
-        let response = IronShieldChallengeResponse::new([0; 64], 42);
+        let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
+        let challenge = IronShieldChallenge::new(
+            "test_website".to_string(),
+            [0x12; 32],
+            dummy_key,
+            [0x34; 32],
+        );
+        let response = IronShieldChallengeResponse::new(challenge.clone(), 42);
         let concat = response.concat_struct();
-        assert_eq!(concat, format!("{}|{}", hex::encode([0; 64]), 42.to_string()));
+        let expected = format!("{}|{}", challenge.concat_struct(), 42);
+        assert_eq!(concat, expected);
     }
 
     #[test]
     fn test_from_concat_struct() {
-        let concat = format!("{}|{}", hex::encode([0; 64]), 42);
+        let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
+        let challenge = IronShieldChallenge::new(
+            "test_website".to_string(),
+            [0x12; 32],
+            dummy_key,
+            [0x34; 32],
+        );
+        let concat = format!("{}|{}", challenge.concat_struct(), 42);
         let response = IronShieldChallengeResponse::from_concat_struct(&concat).unwrap();
-        assert_eq!(response.challenge_signature, [0; 64]);
+        assert_eq!(response.solved_challenge.website_id, challenge.website_id);
+        assert_eq!(response.solved_challenge.challenge_param, challenge.challenge_param);
         assert_eq!(response.solution, 42);
     }
 
     #[test]
     fn test_from_concat_struct_edge_cases() {
-        // Test with a valid minimum length hex (64 bytes = 128 hex chars).
-        // Building a string programmatically.
-        let valid_hex = "0".repeat(128);
-        assert_eq!(valid_hex.len(), 128, "Hex string should be exactly 128 characters for 64 bytes");
-
-        let input = format!("{}|0", valid_hex);
-        let result = IronShieldChallengeResponse::from_concat_struct(&input);
-
-        if result.is_err() {
-            panic!("Expected success but got error: {}", result.unwrap_err());
-        }
-
+        let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
+        let challenge = IronShieldChallenge::new(
+            "test_website".to_string(),
+            [0xFF; 32],
+            dummy_key,
+            [0x00; 32],
+        );
+        
+        // Test with negative solution
+        let concat = format!("{}|{}", challenge.concat_struct(), -1);
+        let result = IronShieldChallengeResponse::from_concat_struct(&concat);
+        assert!(result.is_ok());
         let parsed = result.unwrap();
-        assert_eq!(parsed.challenge_signature, [0u8; 64]);
-        assert_eq!(parsed.solution, 0);
-
-        // Test with all F's hex.
-        let all_f_hex = "f".repeat(128);
-        assert_eq!(all_f_hex.len(), 128, "All F's hex string should be exactly 128 characters");
-
-        let input = format!("{}|-1", all_f_hex);
-        let result = IronShieldChallengeResponse::from_concat_struct(&input);
-
-        if result.is_err() {
-            panic!("Expected success but got error: {}", result.unwrap_err());
-        }
-
-        let parsed = result.unwrap();
-        assert_eq!(parsed.challenge_signature, [0xffu8; 64]);
         assert_eq!(parsed.solution, -1);
+        
+        // Test with zero solution  
+        let concat = format!("{}|{}", challenge.concat_struct(), 0);
+        let result = IronShieldChallengeResponse::from_concat_struct(&concat);
+        assert!(result.is_ok());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.solution, 0);
+        
+        // Test with large solution
+        let concat = format!("{}|{}", challenge.concat_struct(), i64::MAX);
+        let result = IronShieldChallengeResponse::from_concat_struct(&concat);
+        assert!(result.is_ok());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.solution, i64::MAX);
+    }
+
+    #[test]
+    fn test_from_concat_struct_error_cases() {
+        // Test with no pipe separator
+        let result = IronShieldChallengeResponse::from_concat_struct("no_pipe_separator");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Expected at least one '|' separator"));
+        
+        // Test with invalid solution
+        let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
+        let challenge = IronShieldChallenge::new(
+            "test_website".to_string(),
+            [0xFF; 32],
+            dummy_key,
+            [0x00; 32],
+        );
+        let concat = format!("{}|{}", challenge.concat_struct(), "not_a_number");
+        let result = IronShieldChallengeResponse::from_concat_struct(&concat);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Failed to parse solution as i64"));
     }
 }
