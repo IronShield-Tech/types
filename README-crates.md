@@ -13,6 +13,8 @@
 
    Built with **Rust compiled to WebAssembly**, IronShield integrates seamlessly with numerous CDN's and reverse proxies to provide blazingly fast scraping and DDoS protection. IronShield is open source and **self-hostable**.
 
+   This repository contains **IronShield Types**, the standardized type system used by IronShield to generate, store, and authenticate proof-of-work challenges accross CLI's, API's, and CDN's. The type system can be used by anyone to build on top of or integrate with the full IronShield suite of services.
+
 </div>
 
 <p align="center">
