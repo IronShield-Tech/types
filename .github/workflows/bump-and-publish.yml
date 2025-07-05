@@ -53,9 +53,14 @@ jobs:
       - name: Commit Version Bump
         run: |
           git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
           
-          git add Cargo.toml Cargo.lock
+          git add Cargo.toml
+          # Add Cargo.lock if it exists (some libraries don't commit it).
+          if [ -f "Cargo.lock" ]; then
+            git add Cargo.lock
+          fi
+          
           git commit -m "chore: bump version to ${{ env.NEW_VERSION }} [skip ci]"
           git push origin main
 
