@@ -7,7 +7,7 @@
 <div align="center">
     
    ### IronShield: Scraping & DDoS Protection For Everyone
-   [![License: Apache-2.0](https://img.shields.io/badge/license-Apache2.0-blue.svg)](https://github.com/IronShield-Tech/ironshield-api/blob/main/LICENSE)
+   [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/IronShield-Tech/ironshield-api/blob/main/LICENSE)
 
    *A stateless scraping & L7 DDoS protection solution optimized for performance, privacy, and accessibility*
 
