@@ -57,7 +57,7 @@ jobs:
           
           git add Cargo.toml
           # Add Cargo.lock if it exists (some libraries don't commit it).
-          if [ -f "Cargo.lock" ]; then
+          if [[ -f "Cargo.lock" ]]; then
             git add Cargo.lock
           fi
           
