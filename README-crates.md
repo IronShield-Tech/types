@@ -11,7 +11,7 @@
 
    *A stateless scraping & L7 DDoS protection solution optimized for performance, privacy, and accessibility*
 
-   Built with **Rust compiled**, IronShield integrates seamlessly with numerous CDN's and reverse proxies to provide blazingly fast scraping and DDoS protection. IronShield is open source and **self-hostable**.
+   Built with **Rust compiled to WebAssembly**, IronShield integrates seamlessly with numerous CDN's and reverse proxies to provide blazingly fast scraping and DDoS protection. IronShield is open source and **self-hostable**.
 
 </div>
 
