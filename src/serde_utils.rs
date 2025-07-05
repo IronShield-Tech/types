@@ -124,7 +124,6 @@ where
     serializer.serialize_bytes(bytes)
 }
 
-
 /// Custom serialization for 32-byte arrays (challenge params, public keys)
 ///
 /// Deserializes a byte sequence back into a fixed-size 32-byte array,
