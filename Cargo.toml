@@ -6,7 +6,7 @@ authors = [ "IronShield Developers <software@ironshield.cloud>" ]
 description = "Standardized Types for IronShield Bindings"
 license = "Apache-2.0"
 repository = "https://github.com/IronShield-Tech/IronShield"
-readme = "README.md"
+readme = "README-crates.md"
 keywords = ["proof-of-work", "types", "serialization", "ddos", "firewall"]
 categories = ["cryptography", "web-programming", "wasm"]
 
