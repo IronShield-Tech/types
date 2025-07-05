@@ -11,7 +11,7 @@ pub struct IronShieldRequest {
 impl IronShieldRequest {
     /// Constructor for creating a new IronShieldRequest instance.
     pub fn new(
-        endpoint: String,
+        endpoint:  String,
         timestamp: i64
     ) -> Self {
         Self { 
@@ -85,18 +85,18 @@ impl IronShieldRequest {
     /// the input string and then parsing it using the established `|` delimiter format.
     ///
     /// # Arguments
-    /// * `encoded_header`: The base64url-encoded string from the HTTP header
+    /// * `encoded_header`: The base64url-encoded string from the HTTP header.
     ///
     /// # Returns
-    /// * `Result<Self, String>`: Decoded response or detailed error message
+    /// * `Result<Self, String>`: Decoded response or detailed error message.
     ///
     /// # Example
     /// ```
     /// use ironshield_types::IronShieldRequest;
-    /// // Create a response and encode it
+    /// // Create a response and encode it.
     /// let original = IronShieldRequest::new("https://example.com/api".to_string(), 123456789);
     /// let header_value = original.to_base64url_header();
-    /// // Decode it back
+    /// // Decode it back.
     /// let decoded = IronShieldRequest::from_base64url_header(&header_value).unwrap();
     /// assert_eq!(original.endpoint, decoded.endpoint);
     /// ```

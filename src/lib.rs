@@ -17,8 +17,8 @@ pub use request::*;
 pub use token::*;
 pub use crypto::*;
 
-// Re-export chrono for convenience
+// Re-export of the library chrono for convenience.
 pub use chrono;
 
-// Re-export SigningKey for convenience
+// Re-export of the ed25519_dalek library for convenience.
 pub use ed25519_dalek::SigningKey;

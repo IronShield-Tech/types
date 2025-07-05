@@ -41,7 +41,8 @@ impl IronShieldToken {
         }
     }
 
-    /// Check if the token has expired.
+    /// # Returns
+    /// * `bool`: 
     pub fn is_expired(&self) -> bool {
         Utc::now().timestamp_millis() > self.valid_for
     }

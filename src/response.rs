@@ -12,8 +12,19 @@ pub struct IronShieldChallengeResponse {
 }
 
 impl IronShieldChallengeResponse {
-    /// Constructor for creating a new IronShieldChallengeResponse instance.
-    pub fn new(solved_challenge: IronShieldChallenge, solution: i64) -> Self {
+    /// Constructor for creating a new `IronShieldChallengeResponse` instance.
+    /// 
+    /// # Arguments
+    /// * `solved_challenge`: The solved ironshield challenge.
+    /// * `solution`:         The random nonce that correlates with `solved_challenge`.
+    /// 
+    /// # Returns
+    /// * `Self`:             A new correlating response with the challenge and its 
+    ///                       deciphered nonce. 
+    pub fn new(
+        solved_challenge: IronShieldChallenge, 
+        solution: i64
+    ) -> Self {
         Self {
             solved_challenge,
             solution,
@@ -23,8 +34,8 @@ impl IronShieldChallengeResponse {
     /// Concatenates the response data into a string.
     ///
     /// Concatenates:
-    /// - `solved_challenge` as its concatenated string representation.
-    /// - `solution`:        as a string.
+    /// - `solved_challenge`: As its concatenated string representation.
+    /// - `solution`:         As a string.
     pub fn concat_struct(&self) -> String {
         format!(
             "{}|{}",
@@ -85,7 +96,6 @@ impl IronShieldChallengeResponse {
     pub fn to_base64url_header(&self) -> String {
         crate::serde_utils::concat_struct_base64url_encode(&self.concat_struct())
     }
-
     
     /// Decodes a base64url-encoded response from an HTTP header.
     /// 

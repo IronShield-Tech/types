@@ -1,11 +1,20 @@
-use crate::serde_utils::{deserialize_32_bytes, deserialize_signature, serialize_32_bytes, serialize_signature};
+use crate::serde_utils::{
+    deserialize_32_bytes,
+    deserialize_signature,
+    serialize_32_bytes,
+    serialize_signature
+};
+
 use chrono::Utc;
 use ed25519_dalek::SigningKey;
 use hex;
 use rand;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize
+};
 
-pub const CHALLENGE_DIFFICULTY:  u64 = 60_000_000u64;
+pub const CHALLENGE_DIFFICULTY: u64 = 60_000_000u64;
 
 /// IronShield Challenge structure for the proof-of-work algorithm
 ///
@@ -42,32 +51,32 @@ pub struct IronShieldChallenge {
 }
 
 impl IronShieldChallenge {
-    /// Constructor for creating a new IronShieldChallenge instance.
+    /// Constructor for creating a new `IronShieldChallenge` instance.
     /// 
     /// This function creates a new challenge and automatically generates a cryptographic
     /// signature using the provided private key. The signature covers all challenge data
     /// to prevent tampering.
     /// 
     /// # Arguments
-    /// * `website_id` - The identifier of the website
-    /// * `challenge_param` - Target threshold for the proof-of-work
-    /// * `private_key` - Ed25519 private key for signing the challenge
-    /// * `public_key` - Ed25519 public key corresponding to the private key
+    /// * `website_id`:      The identifier of the website.
+    /// * `challenge_param`: Target threshold for the proof-of-work.
+    /// * `private_key`:     Ed25519 private key for signing the challenge.
+    /// * `public_key`:      Ed25519 public key corresponding to the private key.
     /// 
     /// # Returns
-    /// * `Self` - A new, properly signed IronShieldChallenge
+    /// * `Self`:            A new, properly signed IronShieldChallenge.
     pub fn new(
         website_id:       String,
         challenge_param:  [u8; 32],
         private_key:      SigningKey,
         public_key:       [u8; 32],
     ) -> Self {
-        // Generate a fresh random nonce for each challenge
-        let random_nonce: String = Self::generate_random_nonce();
+        // Generate a fresh random nonce for each challenge.
+        let random_nonce:  String = Self::generate_random_nonce();
 
-        // Set the creation and expiration times for the challenge in unix millis
-        let created_time: i64 = Self::generate_created_time();
-        let expiration_time: i64 = created_time + 30_000; // 30 seconds
+        // Set the creation and expiration times for the challenge in unix millis.
+        let created_time:     i64 = Self::generate_created_time();
+        let expiration_time:  i64 = created_time + 30_000; // 30-second expiration.
         
         // Create the signing message from the challenge components
         let signing_message = crate::crypto::create_signing_message(
@@ -79,7 +88,7 @@ impl IronShieldChallenge {
             &public_key
         );
         
-        // Generate the signature using the reusable generate_signature function
+        // Generate the signature using the reusable generate_signature function.
         let challenge_signature: [u8; 64] = crate::crypto::generate_signature(&private_key, &signing_message)
             .unwrap_or([0u8; 64]);
         
@@ -89,7 +98,7 @@ impl IronShieldChallenge {
             website_id,
             expiration_time,
             challenge_param,
-            recommended_attempts: 0, // This will be set later
+            recommended_attempts: 0, // This will be set later. (Ethan's idea)
             public_key,
             challenge_signature,
         }
@@ -101,31 +110,31 @@ impl IronShieldChallenge {
     /// where SHA256(random_nonce_bytes + nonce_bytes) < challenge_param.
     ///
     /// Since hash outputs are uniformly distributed over the 256-bit space, the relationship is:
-    /// challenge_param = 2^256 / difficulty
+    /// challenge_param = 2^256 / difficulty.
     ///
     /// This function accurately calculates this for difficulties ranging from 1 to u64::MAX.
     ///
     /// # Arguments
-    /// * `difficulty`: Expected number of attempts (must be > 0)
+    /// * `difficulty`: Expected number of attempts (must be > 0).
     ///
     /// # Returns
-    /// * `[u8; 32]`: The challenge_param bytes in big-endian format
+    /// * `[u8; 32]`: The challenge_param bytes in big-endian format.
     ///
     /// # Panics
     /// * Panics if difficulty is 0
     ///
     /// # Examples
-    /// * difficulty = 1 → challenge_param = [0xFF; 32] (very easy, ~100% chance)
-    /// * difficulty = 2 → challenge_param = [0x80, 0x00, ...] (MSB set, ~50% chance)
-    /// * difficulty = 10,000 → challenge_param ≈ 2^242.7 (realistic difficulty)
-    /// * difficulty = 1,000,000 → challenge_param ≈ 2^236.4 (higher difficulty)
+    /// * difficulty = 1 ->         challenge_param = [0xFF; 32] (very easy, ~100% chance).
+    /// * difficulty = 2 ->         challenge_param = [0x80, 0x00, ...] (MSB set, ~50% chance).
+    /// * difficulty = 10,000 ->    challenge_param ≈ 2^242.7 (realistic difficulty).
+    /// * difficulty = 1,000,000 -> challenge_param ≈ 2^236.4 (higher difficulty).
     pub fn difficulty_to_challenge_param(difficulty: u64) -> [u8; 32] {
         if difficulty == 0 {
             panic!("Difficulty cannot be zero");
         }
 
+        // Special case: difficulty 1 means almost certain success.
         if difficulty == 1 {
-            // Special case: difficulty 1 means almost certain success.
             return [0xFF; 32];
         }
 
@@ -134,7 +143,7 @@ impl IronShieldChallenge {
         let log2_difficulty: f64 = difficulty_f64.log2();
 
         // Target exponent: 256 - log2(difficulty)
-        // This gives us the exponent of 2 in the result 2^256 / difficulty ≈ 2^target_exponent.
+        // This gives us the exponent of 2 in the result 2^256 / difficulty ≈ 2^(target_exponent).
         let target_exponent: f64 = 256.0 - log2_difficulty;
 
         if target_exponent <= 0.0 {
@@ -173,12 +182,14 @@ impl IronShieldChallenge {
         result
     }
 
-    /// Check if the challenge has expired.
+    /// # Returns
+    /// - `bool`: `true` if the challenge is expired, `false` otherwise.
     pub fn is_expired(&self) -> bool {
         Utc::now().timestamp_millis() > self.expiration_time
     }
 
-    /// Returns the remaining time until expiration in milliseconds.
+    /// # Returns
+    /// - `i64`: `created_time` **plus** 30 seconds.
     pub fn time_until_expiration(&self) -> i64 {
         self.expiration_time - Utc::now().timestamp_millis()
     }
@@ -226,8 +237,8 @@ impl IronShieldChallenge {
     ///
     /// Concatenates:
     /// - `random_nonce`     as a string.
-    /// - `created_time`     as i64.
-    /// - `expiration_time`  as i64.
+    /// - `created_time`     as `i64`.
+    /// - `expiration_time`  as `i64`.
     /// - `website_id`       as a string.
     /// - `public_key`       as a lowercase hex string.
     /// - `challenge_params` as a lowercase hex string.
@@ -302,7 +313,7 @@ impl IronShieldChallenge {
             expiration_time,
             website_id,
             challenge_param,
-            recommended_attempts: 0, // This will be set later
+            recommended_attempts: 0, // This will be set later.
             public_key,
             challenge_signature,
         })
@@ -314,7 +325,7 @@ impl IronShieldChallenge {
     /// format, and then base64url-encodes the result for safe transport in HTTP headers.
     ///
     /// # Returns
-    /// * `String`: Base64url-encoded string ready for HTTP header use
+    /// * `String`: Base64url-encoded string ready for HTTP header use.
     ///
     /// # Example
     /// ```
@@ -340,10 +351,10 @@ impl IronShieldChallenge {
     /// the input string and then parsing it using the established `|` delimiter format.
     ///
     /// # Arguments
-    /// * `encoded_header`: The base64url-encoded string from the HTTP header
+    /// * `encoded_header`: The base64url-encoded string from the HTTP header.
     ///
     /// # Returns
-    /// * `Result<Self, String>`: Decoded challenge or detailed error message
+    /// * `Result<Self, String>`: Decoded challenge or detailed error message.
     ///
     /// # Example
     /// ```
