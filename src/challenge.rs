@@ -238,13 +238,14 @@ impl IronShieldChallenge {
     /// - `challenge_params` as a lowercase hex string.
     pub fn concat_struct(&self) -> String {
         format!(
-            "{}|{}|{}|{}|{}|{}|{}",
+            "{}|{}|{}|{}|{}|{}|{}|{}",
             self.random_nonce,
             self.created_time,
             self.expiration_time,
             self.website_id,
             // We need to encode the byte arrays for format! to work.
             hex::encode(self.challenge_param),
+            self.recommended_attempts,
             hex::encode(self.public_key),
             hex::encode(self.challenge_signature)
         )
@@ -270,8 +271,8 @@ impl IronShieldChallenge {
     pub fn from_concat_struct(concat_str: &str) -> Result<Self, String> {
         let parts: Vec<&str> = concat_str.split('|').collect();
 
-        if parts.len() != 7 {
-            return Err(format!("Expected 7 parts, got {}", parts.len()));
+        if parts.len() != 8 {
+            return Err(format!("Expected 8 parts, got {}", parts.len()));
         }
 
         let random_nonce: String = parts[0].to_string();
@@ -289,13 +290,16 @@ impl IronShieldChallenge {
         let challenge_param: [u8; 32] = challenge_param_bytes
             .try_into()
             .map_err(|_| "Challenge params must be exactly 32 bytes")?;
+        
+        let recommended_attempts: u64 = parts[5].parse::<u64>()
+            .map_err(|_| "Failed to parse recommended_attempts as u64")?;
 
-        let public_key_bytes: Vec<u8> = hex::decode(parts[5])
+        let public_key_bytes: Vec<u8> = hex::decode(parts[6])
             .map_err(|_| "Failed to decode public_key hex string")?;
         let public_key: [u8; 32] = public_key_bytes.try_into()
             .map_err(|_| "Public key must be exactly 32 bytes")?;
 
-        let signature_bytes: Vec<u8> = hex::decode(parts[6])
+        let signature_bytes: Vec<u8> = hex::decode(parts[7])
             .map_err(|_| "Failed to decode challenge_signature hex string")?;
         let challenge_signature: [u8; 64] = signature_bytes
             .try_into()
@@ -307,7 +311,7 @@ impl IronShieldChallenge {
             expiration_time,
             website_id,
             challenge_param,
-            recommended_attempts: 0, // This will be set later.
+            recommended_attempts,
             public_key,
             challenge_signature,
         })
@@ -614,17 +618,17 @@ mod tests {
 
     #[test]
     fn test_base64url_header_invalid_data() {
-        // Test invalid base64url
+        // Test invalid base64url.
         let result: Result<IronShieldChallenge, String> = IronShieldChallenge::from_base64url_header("invalid-base64!");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Base64 decode error"));
 
-        // Test valid base64url but invalid concatenated format
-        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-        let invalid_format: String = URL_SAFE_NO_PAD.encode(b"not|enough|parts");
+        // Test valid base64url but invalid concatenated format.
+        use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+        let invalid_format: String = URL_SAFE_NO_PAD.encode(b"not_enough_parts");
         let result: Result<IronShieldChallenge, String> = IronShieldChallenge::from_base64url_header(&invalid_format);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Expected 7 parts"));
+        assert!(result.unwrap_err().contains("Expected 8 parts"));
     }
 
     #[test]
@@ -656,52 +660,45 @@ mod tests {
 
     #[test]
     fn test_from_concat_struct_edge_cases() {
-        // Test with a valid minimum length hex (32 bytes = 64 hex chars
-        // for challenge_param and public_key, 64 bytes = 128 hex chars
-        // for signature).
-        // Building strings programmatically.
-        let valid_32_byte_hex = "0".repeat(64);  // 32 bytes = 64 hex chars
-        let valid_64_byte_hex = "0".repeat(128); // 64 bytes = 128 hex chars
+        // Test with all zero values
+        let valid_32_byte_hex = "0000000000000000000000000000000000000000000000000000000000000000";
         assert_eq!(valid_32_byte_hex.len(), 64, "32-byte hex string should be exactly 64 characters");
+        let valid_64_byte_hex = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
         assert_eq!(valid_64_byte_hex.len(), 128, "64-byte hex string should be exactly 128 characters");
 
-        let input = format!("test_nonce|1000000|1030000|test_website|{}|{}|{}",
+        let input = format!("test_nonce|1000000|1030000|test_website|{}|0|{}|{}",
                             valid_32_byte_hex, valid_32_byte_hex, valid_64_byte_hex);
         let result = IronShieldChallenge::from_concat_struct(&input);
 
-        if result.is_err() {
-            panic!("Expected success but got error: {}", result.unwrap_err());
-        }
-
+        assert!(result.is_ok(), "Should parse valid zero-value data");
         let parsed = result.unwrap();
         assert_eq!(parsed.random_nonce, "test_nonce");
         assert_eq!(parsed.created_time, 1000000);
         assert_eq!(parsed.expiration_time, 1030000);
         assert_eq!(parsed.website_id, "test_website");
         assert_eq!(parsed.challenge_param, [0u8; 32]);
+        assert_eq!(parsed.recommended_attempts, 0);
         assert_eq!(parsed.public_key, [0u8; 32]);
         assert_eq!(parsed.challenge_signature, [0u8; 64]);
-
-        // Test with all F's hex.
-        let all_f_32_hex = "f".repeat(64);   // 32 bytes of 0xFF
-        let all_f_64_hex = "f".repeat(128);  // 64 bytes of 0xFF
+        
+        // Test with all max values (0xFF)
+        let all_f_32_hex = "f".repeat(64);
         assert_eq!(all_f_32_hex.len(), 64, "All F's 32-byte hex string should be exactly 64 characters");
+        let all_f_64_hex = "f".repeat(128);
         assert_eq!(all_f_64_hex.len(), 128, "All F's 64-byte hex string should be exactly 128 characters");
 
-        let input = format!("max_nonce|9999999|9999999|max_website|{}|{}|{}",
-                            all_f_32_hex, all_f_32_hex, all_f_64_hex);
+        let input = format!("max_nonce|{}|{}|max_website|{}|{}|{}|{}",
+                            i64::MAX, i64::MAX, all_f_32_hex, u64::MAX, all_f_32_hex, all_f_64_hex);
         let result = IronShieldChallenge::from_concat_struct(&input);
 
-        if result.is_err() {
-            panic!("Expected success but got error: {}", result.unwrap_err());
-        }
-
+        assert!(result.is_ok(), "Should parse valid max-value data");
         let parsed = result.unwrap();
         assert_eq!(parsed.random_nonce, "max_nonce");
-        assert_eq!(parsed.created_time, 9999999);
-        assert_eq!(parsed.expiration_time, 9999999);
+        assert_eq!(parsed.created_time, i64::MAX);
+        assert_eq!(parsed.expiration_time, i64::MAX);
         assert_eq!(parsed.website_id, "max_website");
         assert_eq!(parsed.challenge_param, [0xffu8; 32]);
+        assert_eq!(parsed.recommended_attempts, u64::MAX);
         assert_eq!(parsed.public_key, [0xffu8; 32]);
         assert_eq!(parsed.challenge_signature, [0xffu8; 64]);
     }
