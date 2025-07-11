@@ -100,7 +100,7 @@ impl IronShieldChallenge {
             website_id,
             expiration_time,
             challenge_param,
-            recommended_attempts: 0, // This will be set later. (Ethan's idea)
+            recommended_attempts: Self::recommended_attempts(difficulty),
             public_key,
             challenge_signature,
         }
@@ -225,14 +225,6 @@ impl IronShieldChallenge {
     /// * difficulty = 50,000 → recommended_attempts = 150,000
     pub fn recommended_attempts(difficulty: u64) -> u64 {
         difficulty.saturating_mul(3)
-    }
-
-    /// Sets the recommended_attempts field based on the given difficulty.
-    ///
-    /// # Arguments
-    /// * `difficulty` - The difficulty value to base the recommendation on.
-    pub fn set_recommended_attempts(&mut self, difficulty: u64) {
-        self.recommended_attempts = Self::recommended_attempts(difficulty);
     }
 
     /// Concatenates the challenge data into a string.
