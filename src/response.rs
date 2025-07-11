@@ -88,7 +88,7 @@ impl IronShieldChallengeResponse {
     /// ```
     /// use ironshield_types::{IronShieldChallengeResponse, IronShieldChallenge, SigningKey};
     /// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
-    /// let challenge = IronShieldChallenge::new("test".to_string(), [0x12; 32], dummy_key, [0x34; 32]);
+    /// let challenge = IronShieldChallenge::new("test".to_string(), 100_000, dummy_key, [0x34; 32]);
     /// let response = IronShieldChallengeResponse::new(challenge, 12345);
     /// let header_value = response.to_base64url_header();
     /// // Use header_value in HTTP header: "X-IronShield-Challenge-Response: {header_value}"
@@ -111,9 +111,9 @@ impl IronShieldChallengeResponse {
     /// # Example
     /// ```
     /// use ironshield_types::{IronShieldChallengeResponse, IronShieldChallenge, SigningKey};
-    /// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
-    /// let challenge = IronShieldChallenge::new("test".to_string(), [0x12; 32], dummy_key, [0x34; 32]);
     /// // Create a response and encode it
+    /// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
+    /// let challenge = IronShieldChallenge::new("test".to_string(), 100_000, dummy_key, [0x34; 32]);
     /// let original = IronShieldChallengeResponse::new(challenge, 12345);
     /// let header_value = original.to_base64url_header();
     /// // Decode it back
@@ -140,7 +140,7 @@ mod tests {
         let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
-            [0x12; 32],
+            100_000,
             dummy_key,
             [0x34; 32],
         );
@@ -179,7 +179,7 @@ mod tests {
         let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
-            [0x12; 32],
+            100_000,
             dummy_key,
             [0x34; 32],
         );
@@ -194,7 +194,7 @@ mod tests {
         let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
-            [0x12; 32],
+            100_000,
             dummy_key,
             [0x34; 32],
         );
@@ -210,7 +210,7 @@ mod tests {
         let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
-            [0xFF; 32],
+            1,
             dummy_key,
             [0x00; 32],
         );
@@ -248,7 +248,7 @@ mod tests {
         let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
-            [0xFF; 32],
+            1,
             dummy_key,
             [0x00; 32],
         );

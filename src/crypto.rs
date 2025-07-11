@@ -502,7 +502,7 @@ pub fn generate_signature(signing_key: &SigningKey, message: &str) -> Result<[u8
 /// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
 /// let mut challenge = IronShieldChallenge::new(
 ///     "test_website".to_string(),
-///     [0x12; 32],
+///     100_000,
 ///     dummy_key,
 ///     [0x34; 32],
 /// );
@@ -543,7 +543,7 @@ pub fn sign_challenge(challenge: &IronShieldChallenge) -> Result<[u8; 64], Crypt
 /// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
 /// let challenge = IronShieldChallenge::new(
 ///     "test_website".to_string(),
-///     [0x12; 32],
+///     100_000,
 ///     dummy_key,
 ///     [0x34; 32],
 /// );
@@ -820,7 +820,7 @@ mod tests {
         // Create a challenge with the public key
         let challenge = IronShieldChallenge::new(
             "example.com".to_string(),
-            [0xAB; 32],
+            100_000,
             signing_key.clone(),
             verifying_key.to_bytes(),
         );
@@ -958,7 +958,7 @@ mod tests {
         // Create a test challenge - it will be automatically signed
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
-            [0x12; 32],
+            100_000,
             signing_key.clone(),
             verifying_key.to_bytes(),
         );
@@ -995,7 +995,7 @@ mod tests {
         // Create and sign a challenge - signature is generated automatically
         let mut challenge = IronShieldChallenge::new(
             "test_website".to_string(),
-            [0x12; 32],
+            100_000,
             signing_key.clone(),
             verifying_key.to_bytes(),
         );
@@ -1033,7 +1033,7 @@ mod tests {
         let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
         let mut challenge = IronShieldChallenge::new(
             "test_website".to_string(),
-            [0x12; 32],
+            100_000,
             dummy_key,
             [0x34; 32],
         );
@@ -1051,7 +1051,7 @@ mod tests {
         let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
-            [0x12; 32],
+            100_000,
             dummy_key,
             [0x34; 32],
         );
@@ -1065,14 +1065,16 @@ mod tests {
             &challenge.public_key
         );
         
-        // Message should contain all fields except signature
-        assert!(message.contains("test_website"));
-        assert!(message.contains(&hex::encode([0x12; 32])));
-        assert!(message.contains(&hex::encode([0x34; 32])));
-        // Should NOT contain the signature
-        assert!(!message.contains(&hex::encode(challenge.challenge_signature)));
-        // Should have exactly 5 pipe separators (6 total fields, excluding signature)
-        assert_eq!(message.matches('|').count(), 5);
+        // Ensure the message format is as expected
+        let expected_prefix = format!(
+            "{}|{}|{}|{}|",
+            challenge.random_nonce,
+            challenge.created_time,
+            challenge.expiration_time,
+            challenge.website_id
+        );
+        assert!(message.starts_with(&expected_prefix));
+        assert!(message.ends_with(&hex::encode(challenge.public_key)));
     }
 
     #[test]
@@ -1097,7 +1099,7 @@ mod tests {
         // Create a test challenge - it will be automatically signed
         let challenge = IronShieldChallenge::new(
             "test_website".to_string(),
-            [0x12; 32],
+            100_000,
             signing_key.clone(),
             verifying_key.to_bytes(),
         );

@@ -14,7 +14,7 @@ use serde::{
     Serialize
 };
 
-pub const CHALLENGE_DIFFICULTY: u64 = 60_000_000u64;
+pub const CHALLENGE_DIFFICULTY: u64 = 200_000_000u64;
 
 /// IronShield Challenge structure for the proof-of-work algorithm
 ///
@@ -59,7 +59,7 @@ impl IronShieldChallenge {
     /// 
     /// # Arguments
     /// * `website_id`:      The identifier of the website.
-    /// * `challenge_param`: Target threshold for the proof-of-work.
+    /// * `difficulty`:      The target difficulty (expected number of attempts).
     /// * `private_key`:     Ed25519 private key for signing the challenge.
     /// * `public_key`:      Ed25519 public key corresponding to the private key.
     /// 
@@ -67,7 +67,7 @@ impl IronShieldChallenge {
     /// * `Self`:            A new, properly signed IronShieldChallenge.
     pub fn new(
         website_id:       String,
-        challenge_param:  [u8; 32],
+        difficulty:       u64,
         private_key:      SigningKey,
         public_key:       [u8; 32],
     ) -> Self {
@@ -78,6 +78,8 @@ impl IronShieldChallenge {
         let created_time:     i64 = Self::generate_created_time();
         let expiration_time:  i64 = created_time + 30_000; // 30-second expiration.
         
+        let challenge_param: [u8; 32] = Self::difficulty_to_challenge_param(difficulty);
+
         // Create the signing message from the challenge components
         let signing_message = crate::crypto::create_signing_message(
             &random_nonce,
@@ -334,7 +336,7 @@ impl IronShieldChallenge {
     /// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
     /// let challenge = IronShieldChallenge::new(
     ///     "test_website".to_string(),
-    ///     [0x12; 32],
+    ///     100_000,
     ///     dummy_key,
     ///     [0x34; 32],
     /// );
@@ -364,7 +366,7 @@ impl IronShieldChallenge {
     /// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
     /// let original = IronShieldChallenge::new(
     ///     "test_website".to_string(),
-    ///     [0x12; 32],
+    ///     100_000,
     ///     dummy_key,
     ///     [0x34; 32],
     /// );
@@ -593,27 +595,29 @@ mod tests {
 
     #[test]
     fn test_base64url_header_encoding_roundtrip() {
-        // Create a test challenge
-        let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
-        let challenge = IronShieldChallenge::new(
-            "test_website".to_string(),
-            [0x12; 32],
-            dummy_key,
-            [0x34; 32],
+        // Create a dummy challenge for testing.
+        let private_key = SigningKey::from_bytes(&[0; 32]);
+        let public_key = private_key.verifying_key().to_bytes();
+        let original_challenge = IronShieldChallenge::new(
+            "test-site".to_string(),
+            100_000,
+            private_key,
+            public_key,
         );
 
-        // Test base64url encoding and decoding
-        let encoded: String = challenge.to_base64url_header();
-        let decoded: IronShieldChallenge = IronShieldChallenge::from_base64url_header(&encoded).unwrap();
+        // Encode and decode the challenge.
+        let encoded = original_challenge.to_base64url_header();
+        let decoded_challenge = IronShieldChallenge::from_base64url_header(&encoded)
+            .expect("Failed to decode header");
 
-        // Verify all fields are preserved through roundtrip
-        assert_eq!(challenge.random_nonce, decoded.random_nonce);
-        assert_eq!(challenge.created_time, decoded.created_time);
-        assert_eq!(challenge.expiration_time, decoded.expiration_time);
-        assert_eq!(challenge.website_id, decoded.website_id);
-        assert_eq!(challenge.challenge_param, decoded.challenge_param);
-        assert_eq!(challenge.public_key, decoded.public_key);
-        assert_eq!(challenge.challenge_signature, decoded.challenge_signature);
+        // Verify that the fields match.
+        assert_eq!(original_challenge.random_nonce, decoded_challenge.random_nonce);
+        assert_eq!(original_challenge.created_time, decoded_challenge.created_time);
+        assert_eq!(original_challenge.expiration_time, decoded_challenge.expiration_time);
+        assert_eq!(original_challenge.website_id, decoded_challenge.website_id);
+        assert_eq!(original_challenge.challenge_param, decoded_challenge.challenge_param);
+        assert_eq!(original_challenge.public_key, decoded_challenge.public_key);
+        assert_eq!(original_challenge.challenge_signature, decoded_challenge.challenge_signature);
     }
 
     #[test]
