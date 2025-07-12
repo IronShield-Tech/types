@@ -577,16 +577,16 @@ mod tests {
     #[test]
     fn test_recommended_attempts() {
         // Test recommended_attempts function
-        assert_eq!(IronShieldChallenge::recommended_attempts(1000), 3000);
-        assert_eq!(IronShieldChallenge::recommended_attempts(50000), 150000);
+        assert_eq!(IronShieldChallenge::recommended_attempts(1000), 2000);
+        assert_eq!(IronShieldChallenge::recommended_attempts(50000), 100000);
         assert_eq!(IronShieldChallenge::recommended_attempts(0), 0);
 
         // Test overflow protection
         assert_eq!(IronShieldChallenge::recommended_attempts(u64::MAX), u64::MAX);
 
         // Test realistic range
-        assert_eq!(IronShieldChallenge::recommended_attempts(10_000), 30_000);
-        assert_eq!(IronShieldChallenge::recommended_attempts(1_000_000), 3_000_000);
+        assert_eq!(IronShieldChallenge::recommended_attempts(10_000), 20_000);
+        assert_eq!(IronShieldChallenge::recommended_attempts(1_000_000), 2_000_000);
     }
 
     #[test]
