@@ -680,10 +680,10 @@ pub fn load_private_key_from_data(key_data: &str) -> Result<SigningKey, CryptoEr
             let signing_key: SigningKey = SigningKey::from_bytes(&key_array);
             return Ok(signing_key);
         }
-        Err(CryptoError::PgpParsingFailed(msg)) => {
+        Err(CryptoError::PgpParsingFailed(_msg)) => {
             // Fall back to raw base64 format
         }
-        Err(CryptoError::Base64DecodingFailed(msg)) => {
+        Err(CryptoError::Base64DecodingFailed(_msg)) => {
             // Fall back to raw base64 format
         }
         Err(e) => {
@@ -731,10 +731,10 @@ pub fn load_public_key_from_data(key_data: &str) -> Result<VerifyingKey, CryptoE
                 .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid public key from PGP: {}", e)))?;
             return Ok(verifying_key);
         }
-        Err(CryptoError::PgpParsingFailed(msg)) => {
+        Err(CryptoError::PgpParsingFailed(_msg)) => {
             // Fall back to raw base64 format
         }
-        Err(CryptoError::Base64DecodingFailed(msg)) => {
+        Err(CryptoError::Base64DecodingFailed(_msg)) => {
             // Fall back to raw base64 format
         }
         Err(e) => {
