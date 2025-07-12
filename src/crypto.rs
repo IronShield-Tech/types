@@ -776,6 +776,7 @@ mod tests {
     // Use a mutex to ensure tests don't interfere with each other when setting env vars
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
+    #[allow(dead_code)]
     fn setup_isolated_test_keys() -> (SigningKey, VerifyingKey) {
         use rand_core::OsRng;
         
