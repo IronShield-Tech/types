@@ -221,10 +221,10 @@ impl IronShieldChallenge {
     /// * `u64`: Recommended number of attempts (3x the difficulty)
     ///
     /// # Examples
-    /// * difficulty = 1,000 → recommended_attempts = 3,000
-    /// * difficulty = 50,000 → recommended_attempts = 150,000
+    /// * difficulty = 1,000 → recommended_attempts = 2,000
+    /// * difficulty = 50,000 → recommended_attempts = 100,000
     pub fn recommended_attempts(difficulty: u64) -> u64 {
-        difficulty.saturating_mul(3)
+        difficulty.saturating_mul(2)
     }
 
     /// Concatenates the challenge data into a string.
