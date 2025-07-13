@@ -21,9 +21,8 @@ wasm-bindgen = { version = "0.2.100", features = ["serde-serialize"] }
 serde-wasm-bindgen = "0.6.5"
 
 # Workspace specific dependencies (unchanged).
-ed25519-dalek = { version = "2.1", features = ["rand_core"] }
-rand_core = { version = "0.9", features = ["getrandom"] }
-rand = "0.9"
+ed25519-dalek = { version = "2.1", features = ["rand_core"]}
+rand = { version = "0.8", features = ["getrandom"] }
 web-sys = { version = "0.3", features = ["console"], optional = true }
 
 [features]
