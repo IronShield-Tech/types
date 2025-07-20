@@ -172,7 +172,7 @@ impl IronShieldChallenge {
         // Set the bit at the position 'exponent' (where 255 is MSB, 0 is LSB).
         // For a big-endian byte array: bit N is in byte (255-N)/8, bit (7-((255-N)%8)).
         let byte_index: usize = (255 - exponent) / 8;
-        let bit_index: usize = 7 - ((255 - exponent) % 8);
+        let bit_index:  usize = 7 - ((255 - exponent) % 8);
 
         if byte_index < 32 {
             result[byte_index] = 1u8 << bit_index;
@@ -185,25 +185,26 @@ impl IronShieldChallenge {
     }
 
     /// # Returns
-    /// - `bool`: `true` if the challenge is expired, `false` otherwise.
+    /// * `bool`: `true` if the challenge is expired, 
+    ///           `false` otherwise.
     pub fn is_expired(&self) -> bool {
         Utc::now().timestamp_millis() > self.expiration_time
     }
 
     /// # Returns
-    /// - `i64`: `created_time` **plus** 30 seconds.
+    /// * `i64`: `created_time` **plus** 30 seconds.
     pub fn time_until_expiration(&self) -> i64 {
         self.expiration_time - Utc::now().timestamp_millis()
     }
     
     /// # Returns
-    /// - `i64`: The current time in millis.
+    /// * `i64`: The current time in millis.
     pub fn generate_created_time() -> i64 {
         Utc::now().timestamp_millis()
     }
 
     /// # Returns
-    /// - `String`: A random hex-encoded value.
+    /// * `String`: A random hex-encoded value.
     pub fn generate_random_nonce() -> String {
         hex::encode(&rand::random::<[u8; 16]>())
     }
@@ -230,12 +231,12 @@ impl IronShieldChallenge {
     /// Concatenates the challenge data into a string.
     ///
     /// Concatenates:
-    /// - `random_nonce`     as a string.
-    /// - `created_time`     as `i64`.
-    /// - `expiration_time`  as `i64`.
-    /// - `website_id`       as a string.
-    /// - `public_key`       as a lowercase hex string.
-    /// - `challenge_params` as a lowercase hex string.
+    /// * `random_nonce`     as a string.
+    /// * `created_time`     as `i64`.
+    /// * `expiration_time`  as `i64`.
+    /// * `website_id`       as a string.
+    /// * `public_key`       as a lowercase hex string.
+    /// * `challenge_params` as a lowercase hex string.
     pub fn concat_struct(&self) -> String {
         format!(
             "{}|{}|{}|{}|{}|{}|{}|{}",
