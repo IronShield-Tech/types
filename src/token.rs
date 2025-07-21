@@ -1,6 +1,13 @@
 use chrono::Utc;
-use crate::serde_utils::{serialize_signature, deserialize_signature};
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize, 
+    Serialize
+};
+
+use crate::serde_utils::{
+    serialize_signature, 
+    deserialize_signature
+};
 
 /// IronShield Token structure
 ///
