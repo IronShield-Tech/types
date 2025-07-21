@@ -193,7 +193,7 @@ where
 ///                    `concat_struct`.
 ///
 /// # Returns
-/// * A Base64 URL-safe encoded string without padding.
+/// * `String`: A Base64 URL-safe encoded string without padding.
 pub fn concat_struct_base64url_encode(concat_string: &str) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(concat_string.as_bytes())
 }
@@ -210,8 +210,8 @@ pub fn concat_struct_base64url_encode(concat_string: &str) -> String {
 ///                     to decode.
 ///
 /// # Returns
-/// * A Result containing the decoded string or an error
-///   if decoding fails.
+/// * `Result<String, String>`: A Result containing the decoded 
+///                             string or an error if decoding fails.
 ///
 /// # Errors
 /// * Returns a `base64::DecodeError` if the input string
