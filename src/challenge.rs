@@ -212,14 +212,14 @@ impl IronShieldChallenge {
     /// Returns the recommended number of attempts to expect for a given difficulty.
     ///
     /// This provides users with a realistic expectation of how many attempts they might need.
-    /// Since the expected value is equal to the difficulty, we return 3x the difficulty
+    /// Since the expected value is equal to the difficulty, we return 2x the difficulty
     /// to give users a reasonable upper bound for planning purposes.
     ///
     /// # Arguments
     /// * `difficulty`: The target difficulty (expected number of attempts)
     ///
     /// # Returns
-    /// * `u64`: Recommended number of attempts (3x the difficulty)
+    /// * `u64`: Recommended number of attempts (2x the difficulty)
     ///
     /// # Examples
     /// * difficulty = 1,000 → recommended_attempts = 2,000
