@@ -1,4 +1,8 @@
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize, 
+    Serialize
+};
+
 use crate::IronShieldChallenge;
 
 /// IronShield Challenge Response structure
@@ -23,7 +27,7 @@ impl IronShieldChallengeResponse {
     ///                       deciphered nonce. 
     pub fn new(
         solved_challenge: IronShieldChallenge, 
-        solution: i64
+        solution:         i64
     ) -> Self {
         Self {
             solved_challenge,
