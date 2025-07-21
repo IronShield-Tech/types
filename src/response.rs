@@ -38,8 +38,8 @@ impl IronShieldChallengeResponse {
     /// Concatenates the response data into a string.
     ///
     /// Concatenates:
-    /// - `solved_challenge`: As its concatenated string representation.
-    /// - `solution`:         As a string.
+    /// * `solved_challenge`: As its concatenated string representation.
+    /// * `solution`:         As a string.
     pub fn concat_struct(&self) -> String {
         format!(
             "{}|{}",
