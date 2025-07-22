@@ -36,7 +36,7 @@ pub struct IronShieldChallenge {
         serialize_with = "serialize_32_bytes",
         deserialize_with = "deserialize_32_bytes"
     )]
-    pub challenge_param:     [u8; 32],
+    pub challenge_param:      [u8; 32],
     pub recommended_attempts: u64,
     #[serde(
         serialize_with = "serialize_32_bytes",
