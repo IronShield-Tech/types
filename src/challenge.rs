@@ -75,20 +75,16 @@ impl IronShieldChallenge {
     /// # Returns
     /// * `Self`:            A new, properly signed IronShieldChallenge.
     pub fn new(
-        website_id:       String,
-        difficulty:       u64,
-        private_key:      SigningKey,
-        public_key:       [u8; 32],
+        website_id:  String,
+        difficulty:  u64,
+        private_key: SigningKey,
+        public_key:  [u8; 32],
     ) -> Self {
-        // Generate a fresh random nonce for each challenge.
-        let random_nonce:  String = Self::generate_random_nonce();
-
-        // Set the creation and expiration times for the challenge in unix millis.
-        let created_time:     i64 = Self::generate_created_time();
-        let expiration_time:  i64 = created_time + 30_000; // 30-second expiration.
-
+        let    random_nonce:   String = Self::generate_random_nonce();
+        let    created_time:      i64 = Self::generate_created_time();
+        let expiration_time:      i64 = created_time + 30_000; // 30-second expiration.
         let challenge_param: [u8; 32] = Self::difficulty_to_challenge_param(difficulty);
-
+        
         // Create the signing message from the challenge components
         let signing_message = crate::crypto::create_signing_message(
             &random_nonce,
