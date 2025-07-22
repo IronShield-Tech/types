@@ -14,7 +14,16 @@ use serde::{
     Serialize
 };
 
-pub const CHALLENGE_DIFFICULTY: u64 = 200_000_000u64;
+pub const CHALLENGE_DIFFICULTY:   u64 = 200_000_000u64;
+
+const                HASH_BITS: usize = 256;
+const               ARRAY_SIZE: usize = 32;
+const            BITS_PER_BYTE: usize = 8;
+const       BITS_PER_BYTE_MASK: usize = 7;
+const           MAX_BYTE_VALUE:    u8 = 0xFF;
+const         MAX_BIT_POSITION: usize = 255;
+const                LSB_INDEX: usize = ARRAY_SIZE - 1;
+const                LSB_VALUE:    u8 = 1;
 
 /// IronShield Challenge structure for the proof-of-work algorithm
 ///
@@ -52,17 +61,17 @@ pub struct IronShieldChallenge {
 
 impl IronShieldChallenge {
     /// Constructor for creating a new `IronShieldChallenge` instance.
-    /// 
+    ///
     /// This function creates a new challenge and automatically generates a cryptographic
     /// signature using the provided private key. The signature covers all challenge data
     /// to prevent tampering.
-    /// 
+    ///
     /// # Arguments
     /// * `website_id`:      The identifier of the website.
     /// * `difficulty`:      The target difficulty (expected number of attempts).
     /// * `private_key`:     Ed25519 private key for signing the challenge.
     /// * `public_key`:      Ed25519 public key corresponding to the private key.
-    /// 
+    ///
     /// # Returns
     /// * `Self`:            A new, properly signed IronShieldChallenge.
     pub fn new(
@@ -77,7 +86,7 @@ impl IronShieldChallenge {
         // Set the creation and expiration times for the challenge in unix millis.
         let created_time:     i64 = Self::generate_created_time();
         let expiration_time:  i64 = created_time + 30_000; // 30-second expiration.
-        
+
         let challenge_param: [u8; 32] = Self::difficulty_to_challenge_param(difficulty);
 
         // Create the signing message from the challenge components
@@ -89,11 +98,11 @@ impl IronShieldChallenge {
             &challenge_param,
             &public_key
         );
-        
+
         // Generate the signature using the reusable generate_signature function.
         let challenge_signature: [u8; 64] = crate::crypto::generate_signature(&private_key, &signing_message)
             .unwrap_or([0u8; 64]);
-        
+
         Self {
             random_nonce,
             created_time,
@@ -132,60 +141,81 @@ impl IronShieldChallenge {
     /// * difficulty = 1,000,000 -> challenge_param ≈ 2^236.4 (higher difficulty).
     pub fn difficulty_to_challenge_param(difficulty: u64) -> [u8; 32] {
         if difficulty == 0 {
-            panic!("Difficulty cannot be zero");
+            panic!("Difficulty cannot be zero.")
         }
 
-        // Special case: difficulty 1 means almost certain success.
         if difficulty == 1 {
-            return [0xFF; 32];
+            return [MAX_BYTE_VALUE; ARRAY_SIZE];
         }
 
-        // Calculate log2(difficulty) for bit positioning.
-        let difficulty_f64: f64 = difficulty as f64;
-        let log2_difficulty: f64 = difficulty_f64.log2();
+        // Calculate target exponent: 256 - log2(difficulty).
+        // This gives us the exponent of 2 in the result
+        // 2^256 / difficulty ~= 2^(target_exponent).
+        let log2_difficulty: f64 = (difficulty as f64).log2();
+        let target_exponent: f64 = HASH_BITS as f64 - log2_difficulty;
 
-        // Target exponent: 256 - log2(difficulty)
-        // This gives us the exponent of 2 in the result 2^256 / difficulty ≈ 2^(target_exponent).
-        let target_exponent: f64 = 256.0 - log2_difficulty;
-
-        if target_exponent <= 0.0 {
-            // The result would be less than 1, return minimal value.
-            let mut result: [u8; 32] = [0u8; 32];
-            result[31] = 1;
-            return result;
+        if target_exponent <= 0.0 { // Result would be less than 1, return min value.
+            return Self::create_minimal_challenge_param()
         }
 
-        if target_exponent >= 256.0 {
-            // Result would overflow, return maximum.
-            return [0xFF; 32];
+        if target_exponent >= HASH_BITS as f64 {
+            return [MAX_BYTE_VALUE; ARRAY_SIZE];
         }
 
-        // Round to the nearest whole number for simplicity.
-        let exponent: usize = target_exponent.round() as usize;
+        // Round to the nearest whole number for bit positioning.
+        let bit_position: usize = target_exponent.round() as usize;
 
-        if exponent >= 256 {
-            return [0xFF; 32];
+        if bit_position >= HASH_BITS {
+            return [MAX_BYTE_VALUE; ARRAY_SIZE];
         }
 
-        let mut result: [u8; 32] = [0u8; 32];
+        Self::create_challenge_param_with_bit_set(bit_position)
+    }
 
-        // Set the bit at the position 'exponent' (where 255 is MSB, 0 is LSB).
-        // For a big-endian byte array: bit N is in byte (255-N)/8, bit (7-((255-N)%8)).
-        let byte_index: usize = (255 - exponent) / 8;
-        let bit_index:  usize = 7 - ((255 - exponent) % 8);
+    /// Creates a challenge parameter with the minimal
+    /// possible value (LSB set).
+    ///
+    /// # Returns
+    /// * `[u8; 32]`: Array with only the least significant
+    ///               bit set.
+    fn create_minimal_challenge_param() -> [u8; 32] {
+        let mut result: [u8; 32] = [0u8; ARRAY_SIZE];
+        result[LSB_INDEX] = LSB_VALUE;
+        result
+    }
 
-        if byte_index < 32 {
+    /// Creates a challenge parameter with a specific bit
+    /// set.
+    ///
+    /// For a big-endian byte array, bit N is located at:
+    /// - byte index: (255 - N) / 8
+    /// - bit index within byte: 7 - ((255 - N) % 8)
+    ///
+    /// # Arguments
+    /// * `bit_position`: The bit position to set (0 = LSB, 255 = MSB).
+    ///
+    /// # Returns
+    /// * `[u8; 32]`: Array with the specified bit set.
+    fn create_challenge_param_with_bit_set(
+        bit_position: usize
+    ) -> [u8; 32] {
+        let mut result: [u8; 32] = [0u8; ARRAY_SIZE];
+
+        // Calculate byte and bit indices for big-endian format.
+        let byte_index: usize = (MAX_BIT_POSITION - bit_position) / BITS_PER_BYTE;
+        let  bit_index: usize = BITS_PER_BYTE_MASK - ((MAX_BIT_POSITION - bit_position) % BITS_PER_BYTE);
+
+        if byte_index < ARRAY_SIZE {
             result[byte_index] = 1u8 << bit_index;
-        } else {
-            // Very small result, set the least significant bit.
-            result[31] = 1;
+        } else { // Fallback on edge case: set the least significant bit.
+            return Self::create_minimal_challenge_param()
         }
 
         result
     }
 
     /// # Returns
-    /// * `bool`: `true` if the challenge is expired, 
+    /// * `bool`: `true` if the challenge is expired,
     ///           `false` otherwise.
     pub fn is_expired(&self) -> bool {
         Utc::now().timestamp_millis() > self.expiration_time
@@ -196,7 +226,7 @@ impl IronShieldChallenge {
     pub fn time_until_expiration(&self) -> i64 {
         self.expiration_time - Utc::now().timestamp_millis()
     }
-    
+
     /// # Returns
     /// * `i64`: The current time in millis.
     pub fn generate_created_time() -> i64 {
@@ -291,7 +321,7 @@ impl IronShieldChallenge {
         let challenge_param: [u8; 32] = challenge_param_bytes
             .try_into()
             .map_err(|_| "Challenge params must be exactly 32 bytes")?;
-        
+
         let recommended_attempts: u64 = parts[5].parse::<u64>()
             .map_err(|_| "Failed to parse recommended_attempts as u64")?;
 
@@ -681,7 +711,7 @@ mod tests {
         assert_eq!(parsed.recommended_attempts, 0);
         assert_eq!(parsed.public_key, [0u8; 32]);
         assert_eq!(parsed.challenge_signature, [0u8; 64]);
-        
+
         // Test with all max values (0xFF)
         let all_f_32_hex = "f".repeat(64);
         assert_eq!(all_f_32_hex.len(), 64, "All F's 32-byte hex string should be exactly 64 characters");
