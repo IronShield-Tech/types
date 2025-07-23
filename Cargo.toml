@@ -1,6 +1,6 @@
 [package]
 name = "ironshield-types"
-version = "0.1.49"
+version = "0.2.0"
 edition = "2021"
 authors = [ "IronShield Developers <software@ironshield.cloud>" ]
 description = "Standardized Types, Headers, & Methods for IronShield Bindings"
@@ -11,7 +11,6 @@ keywords = ["proof-of-work", "types", "serialization", "ddos", "firewall"]
 categories = ["cryptography", "web-programming", "wasm"]
 
 [dependencies]
-# Replace workspace dependencies with direct versions.
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 hex = "0.4"
@@ -19,8 +18,6 @@ chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.22.1"
 wasm-bindgen = { version = "0.2.100", features = ["serde-serialize"] }
 serde-wasm-bindgen = "0.6.5"
-
-# Workspace specific dependencies (unchanged).
 ed25519-dalek = { version = "2.1", features = ["rand_core"]}
 rand = { version = "0.8", features = ["getrandom"] }
 web-sys = { version = "0.3", features = ["console"], optional = true }
