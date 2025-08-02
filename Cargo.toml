@@ -21,10 +21,12 @@ serde-wasm-bindgen = "0.6.5"
 ed25519-dalek = { version = "2.1", features = ["rand_core"]}
 rand = { version = "0.8", features = ["getrandom"] }
 web-sys = { version = "0.3", features = ["console"], optional = true }
+utoipa = { version = "5", optional = true }
 
 [features]
 default = []
 wasm-logging = ["web-sys"]
+openapi = ["utoipa"]
 
 [lib]
 name = "ironshield_types"

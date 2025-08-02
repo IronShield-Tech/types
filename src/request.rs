@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// * `endpoint`:  The endpoint URL for the request.
 /// * `timestamp`: The timestamp of the request in unix millis.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IronShieldRequest {
     pub endpoint:  String,

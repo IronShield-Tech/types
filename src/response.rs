@@ -9,6 +9,7 @@ use crate::IronShieldChallenge;
 /// 
 /// * `solved_challenge`: The complete original IronShieldChallenge that was solved.
 /// * `solution`:         The nonce solution found by the proof-of-work algorithm.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IronShieldChallengeResponse {
     pub solved_challenge: IronShieldChallenge,

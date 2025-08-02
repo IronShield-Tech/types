@@ -35,6 +35,7 @@ const                LSB_VALUE:    u8 = 1;
 /// * `website_id`:           The identifier of the website.
 /// * `public_key`:           Ed25519 public key for signature verification.
 /// * `challenge_signature`:  Ed25519 signature over the challenge data.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IronShieldChallenge {
     pub random_nonce:        String,

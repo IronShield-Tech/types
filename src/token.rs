@@ -17,6 +17,7 @@ use crate::serde_utils::{
 ///                               to the central private key (32 bytes).
 /// * `authentication_signature`: The signature over (challenge_signature
 ///                               || valid_for).
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IronShieldToken {
     #[serde(
