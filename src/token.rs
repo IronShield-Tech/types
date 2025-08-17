@@ -23,26 +23,7 @@ use serde_json::json;
 
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "openapi", schema(
-    description = "IronShield authentication token containing challenge signature and validity information",
-    example = json!({
-        "challenge_signature": [
-            98, 41, 139, 179, 132, 76, 72, 255, 157, 174, 50, 115, 247, 136, 169, 81,
-            207, 103, 221, 56, 94, 132, 116, 223, 79, 98, 252, 141, 170, 30, 149, 30,
-            97, 132, 148, 134, 199, 198, 122, 254, 103, 224, 178, 167, 177, 23, 99, 146,
-            0, 107, 22, 102, 124, 10, 38, 38, 2, 227, 218, 87, 204, 135, 44, 10
-        ],
-        "valid_for": 1755404945880i64,
-        "public_key": [
-            71, 15, 1, 1, 7, 64, 28, 152, 78, 88, 44, 175, 57, 103, 175, 203,
-            107, 65, 139, 247, 54, 246, 169, 209, 116, 166, 25, 71, 174, 193, 66, 191
-        ],
-        "auth_signature": [
-            156, 23, 45, 67, 89, 123, 210, 98, 76, 54, 32, 187, 145, 67, 89, 210,
-            123, 45, 67, 89, 210, 98, 76, 54, 32, 187, 145, 67, 89, 210, 123, 45,
-            67, 89, 210, 98, 76, 54, 32, 187, 145, 67, 89, 210, 123, 45, 67, 89,
-            210, 98, 76, 54, 32, 187, 145, 67, 89, 210, 123, 45, 67, 89, 210, 98
-        ]
-    })
+    description = "IronShield authentication token containing challenge signature and validity information"
 ))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IronShieldToken {
