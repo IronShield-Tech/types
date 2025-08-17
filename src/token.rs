@@ -17,20 +17,54 @@ use crate::serde_utils::{
 ///                               to the central private key (32 bytes).
 /// * `authentication_signature`: The signature over (challenge_signature
 ///                               || valid_for).
+#[cfg(feature = "openapi")]
+#[allow(unused_imports)]
+use serde_json::json;
+
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", schema(
+    description = "IronShield authentication token containing challenge signature and validity information",
+    example = json!({
+        "challenge_signature": [
+            98, 41, 139, 179, 132, 76, 72, 255, 157, 174, 50, 115, 247, 136, 169, 81,
+            207, 103, 221, 56, 94, 132, 116, 223, 79, 98, 252, 141, 170, 30, 149, 30,
+            97, 132, 148, 134, 199, 198, 122, 254, 103, 224, 178, 167, 177, 23, 99, 146,
+            0, 107, 22, 102, 124, 10, 38, 38, 2, 227, 218, 87, 204, 135, 44, 10
+        ],
+        "valid_for": 1755404945880i64,
+        "public_key": [
+            71, 15, 1, 1, 7, 64, 28, 152, 78, 88, 44, 175, 57, 103, 175, 203,
+            107, 65, 139, 247, 54, 246, 169, 209, 116, 166, 25, 71, 174, 193, 66, 191
+        ],
+        "auth_signature": [
+            156, 23, 45, 67, 89, 123, 210, 98, 76, 54, 32, 187, 145, 67, 89, 210,
+            123, 45, 67, 89, 210, 98, 76, 54, 32, 187, 145, 67, 89, 210, 123, 45,
+            67, 89, 210, 98, 76, 54, 32, 187, 145, 67, 89, 210, 123, 45, 67, 89,
+            210, 98, 76, 54, 32, 187, 145, 67, 89, 210, 123, 45, 67, 89, 210, 98
+        ]
+    })
+))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IronShieldToken {
+    /// The Ed25519 signature of the original challenge (64 bytes)
     #[serde(
         serialize_with = "serialize_signature",
         deserialize_with = "deserialize_signature"
     )]
+    #[cfg_attr(feature = "openapi", schema(example = json!([98, 41, 139, 179, 132, 76, 72, 255, 157, 174, 50, 115, 247, 136, 169, 81, 207, 103, 221, 56, 94, 132, 116, 223, 79, 98, 252, 141, 170, 30, 149, 30, 97, 132, 148, 134, 199, 198, 122, 254, 103, 224, 178, 167, 177, 23, 99, 146, 0, 107, 22, 102, 124, 10, 38, 38, 2, 227, 218, 87, 204, 135, 44, 10])))]
     pub challenge_signature: [u8; 64],
+    /// Unix timestamp in milliseconds until which this token is valid
+    #[cfg_attr(feature = "openapi", schema(example = 1755404945880i64))]
     pub valid_for:           i64,
+    /// Ed25519 public key corresponding to the central private key (32 bytes)
+    #[cfg_attr(feature = "openapi", schema(example = json!([71, 15, 1, 1, 7, 64, 28, 152, 78, 88, 44, 175, 57, 103, 175, 203, 107, 65, 139, 247, 54, 246, 169, 209, 116, 166, 25, 71, 174, 193, 66, 191])))]
     pub public_key:          [u8; 32],
+    /// The signature over (challenge_signature || valid_for) for authentication (64 bytes)
     #[serde(
         serialize_with = "serialize_signature",
         deserialize_with = "deserialize_signature"
     )]
+    #[cfg_attr(feature = "openapi", schema(example = json!([156, 23, 45, 67, 89, 123, 210, 98, 76, 54, 32, 187, 145, 67, 89, 210, 123, 45, 67, 89, 210, 98, 76, 54, 32, 187, 145, 67, 89, 210, 123, 45, 67, 89, 210, 98, 76, 54, 32, 187, 145, 67, 89, 210, 123, 45, 67, 89, 210, 98, 76, 54, 32, 187, 145, 67, 89, 210, 123, 45, 67, 89, 210, 98])))]
     pub auth_signature:      [u8; 64],
 }
 

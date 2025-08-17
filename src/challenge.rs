@@ -35,28 +35,72 @@ const                LSB_VALUE:    u8 = 1;
 /// * `website_id`:           The identifier of the website.
 /// * `public_key`:           Ed25519 public key for signature verification.
 /// * `challenge_signature`:  Ed25519 signature over the challenge data.
+#[cfg(feature = "openapi")]
+#[allow(unused_imports)]
+use serde_json::json;
+
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", schema(
+    description = "IronShield proof-of-work challenge structure",
+    example = json!({
+        "random_nonce": "a6e5f14c9622c88af274ec7247f028eb",
+        "created_time": 1755401345880i64,
+        "expiration_time": 1755401375880i64,
+        "website_id": "https://example.com",
+        "challenge_param": [
+            0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "recommended_attempts": 400000000,
+        "public_key": [
+            71, 15, 1, 1, 7, 64, 28, 152, 78, 88, 44, 175, 57, 103, 175, 203,
+            107, 65, 139, 247, 54, 246, 169, 209, 116, 166, 25, 71, 174, 193, 66, 191
+        ],
+        "challenge_signature": [
+            98, 41, 139, 179, 132, 76, 72, 255, 157, 174, 50, 115, 247, 136, 169, 81,
+            207, 103, 221, 56, 94, 132, 116, 223, 79, 98, 252, 141, 170, 30, 149, 30,
+            97, 132, 148, 134, 199, 198, 122, 254, 103, 224, 178, 167, 177, 23, 99, 146,
+            0, 107, 22, 102, 124, 10, 38, 38, 2, 227, 218, 87, 204, 135, 44, 10
+        ]
+    })
+))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IronShieldChallenge {
+    /// Random nonce used in the proof-of-work challenge
+    #[cfg_attr(feature = "openapi", schema(example = "a6e5f14c9622c88af274ec7247f028eb"))]
     pub random_nonce:        String,
+    /// Unix timestamp in milliseconds when the challenge was created
+    #[cfg_attr(feature = "openapi", schema(example = 1755401345880i64))]
     pub created_time:        i64,
+    /// Unix timestamp in milliseconds when the challenge expires
+    #[cfg_attr(feature = "openapi", schema(example = 1755401375880i64))]
     pub expiration_time:     i64,
+    /// The website or endpoint identifier for this challenge
+    #[cfg_attr(feature = "openapi", schema(example = "https://example.com"))]
     pub website_id:          String,
+    /// Target threshold - proof-of-work hash must be less than this value
     #[serde(
         serialize_with = "serialize_32_bytes",
         deserialize_with = "deserialize_32_bytes"
     )]
+    #[cfg_attr(feature = "openapi", schema(example = json!([0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])))]
     pub challenge_param:      [u8; 32],
+    /// Expected number of attempts needed to solve this challenge
+    #[cfg_attr(feature = "openapi", schema(example = 400000000u64))]
     pub recommended_attempts: u64,
+    /// Ed25519 public key for signature verification (32 bytes)
     #[serde(
         serialize_with = "serialize_32_bytes",
         deserialize_with = "deserialize_32_bytes"
     )]
+    #[cfg_attr(feature = "openapi", schema(example = json!([71, 15, 1, 1, 7, 64, 28, 152, 78, 88, 44, 175, 57, 103, 175, 203, 107, 65, 139, 247, 54, 246, 169, 209, 116, 166, 25, 71, 174, 193, 66, 191])))]
     pub public_key:          [u8; 32],
+    /// Ed25519 signature over the challenge data (64 bytes)
     #[serde(
         serialize_with = "serialize_signature",
         deserialize_with = "deserialize_signature"
     )]
+    #[cfg_attr(feature = "openapi", schema(example = json!([98, 41, 139, 179, 132, 76, 72, 255, 157, 174, 50, 115, 247, 136, 169, 81, 207, 103, 221, 56, 94, 132, 116, 223, 79, 98, 252, 141, 170, 30, 149, 30, 97, 132, 148, 134, 199, 198, 122, 254, 103, 224, 178, 167, 177, 23, 99, 146, 0, 107, 22, 102, 124, 10, 38, 38, 2, 227, 218, 87, 204, 135, 44, 10])))]
     pub challenge_signature: [u8; 64],
 }
 
