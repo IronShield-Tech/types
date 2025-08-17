@@ -14,7 +14,7 @@ use serde::{
     Serialize
 };
 
-pub const CHALLENGE_DIFFICULTY:   u64 = 200_000_000u64;
+pub const CHALLENGE_DIFFICULTY:   u64 = 5_000_000u64;
 
 const                HASH_BITS: usize = 256;
 const               ARRAY_SIZE: usize = 32;
