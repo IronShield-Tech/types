@@ -1,11 +1,26 @@
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "openapi")]
+#[allow(unused_imports)]
+use serde_json::json;
+
 /// * `endpoint`:  The endpoint URL for the request.
 /// * `timestamp`: The timestamp of the request in unix millis.
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", schema(
+    description = "Request structure for an IronShield proof-of-work challenge",
+    example = json!({
+        "endpoint": "https://example.com",
+        "timestamp": 1704067200000i64
+    })
+))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IronShieldRequest {
+    /// The protected endpoint URL (must be HTTPS)
+    #[cfg_attr(feature = "openapi", schema(example = "https://example.com"))]
     pub endpoint:  String,
+    /// Request timestamp in Unix milliseconds (use Date.now() in JavaScript)
+    #[cfg_attr(feature = "openapi", schema(example = 1704067200000i64))]
     pub timestamp: i64,
 }
 
