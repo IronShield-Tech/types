@@ -57,7 +57,7 @@ impl JsIronShieldChallengeResponse {
     #[wasm_bindgen]
     pub fn from_json(json_str: &str) -> Result<Self, JsValue> {
         let response: IronShieldChallengeResponse = serde_json::from_str(json_str)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse JSON: {}", e)))?;
+            .map_err(|e: serde_json::Error| JsValue::from_str(&format!("Failed to parse JSON: {}", e)))?;
         
         Ok(JsIronShieldChallengeResponse { inner: response })
     }

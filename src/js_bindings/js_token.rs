@@ -31,7 +31,7 @@ impl JsIronShieldToken {
     #[wasm_bindgen]
     pub fn from_json(json_str: &str) -> Result<Self, JsValue> {
         let token: IronShieldToken = serde_json::from_str(json_str)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse token JSON: {}", e)))?;
+            .map_err(|e: serde_json::Error| JsValue::from_str(&format!("Failed to parse token JSON: {}", e)))?;
 
         Ok(Self { inner: token })
     }
@@ -45,7 +45,7 @@ impl JsIronShieldToken {
     #[wasm_bindgen]
     pub fn to_json(&self) -> Result<String, JsValue> {
         serde_json::to_string(&self.inner)
-            .map_err(|e| JsValue::from_str(&format!("Failed to serialize token to JSON: {}", e)))
+            .map_err(|e: serde_json::Error| JsValue::from_str(&format!("Failed to serialize token to JSON: {}", e)))
     }
     
     /// Converts the token to a JavaScript object.
@@ -82,8 +82,8 @@ impl JsIronShieldToken {
     #[cfg(any(feature = "wasm", rust_analyzer))]
     #[wasm_bindgen]
     pub fn from_base64url_header(encoded_header_value: &str) -> Result<Self, JsValue> {
-        let token = IronShieldToken::from_base64url_header(encoded_header_value)
-            .map_err(|e| JsValue::from_str(&format!("Failed to decode Base64 URL-safe header: {}", e)))?;
+        let token: IronShieldToken = IronShieldToken::from_base64url_header(encoded_header_value)
+            .map_err(|e: String| JsValue::from_str(&format!("Failed to decode Base64 URL-safe header: {}", e)))?;
         
         Ok(Self { inner: token })
     }
