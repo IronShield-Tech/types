@@ -14,8 +14,6 @@ use serde::{
     Serialize
 };
 
-pub const CHALLENGE_DIFFICULTY:   u64 = 5_000_000u64;
-
 const                HASH_BITS: usize = 256;
 const               ARRAY_SIZE: usize = 32;
 const            BITS_PER_BYTE: usize = 8;
@@ -35,9 +33,6 @@ const                LSB_VALUE:    u8 = 1;
 /// * `website_id`:           The identifier of the website.
 /// * `public_key`:           Ed25519 public key for signature verification.
 /// * `challenge_signature`:  Ed25519 signature over the challenge data.
-#[cfg(feature = "openapi")]
-#[allow(unused_imports)]
-use serde_json::json;
 
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "openapi", schema(
@@ -82,6 +77,8 @@ pub struct IronShieldChallenge {
     #[cfg_attr(feature = "openapi", schema(example = json!([98, 41, 139, 179, 132, 76, 72, 255, 157, 174, 50, 115, 247, 136, 169, 81, 207, 103, 221, 56, 94, 132, 116, 223, 79, 98, 252, 141, 170, 30, 149, 30, 97, 132, 148, 134, 199, 198, 122, 254, 103, 224, 178, 167, 177, 23, 99, 146, 0, 107, 22, 102, 124, 10, 38, 38, 2, 227, 218, 87, 204, 135, 44, 10])))]
     pub challenge_signature: [u8; 64],
 }
+
+
 
 impl IronShieldChallenge {
     /// Constructor for creating a new `IronShieldChallenge` instance.

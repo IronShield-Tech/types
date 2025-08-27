@@ -1,7 +1,7 @@
 [package]
 name = "ironshield-types"
 version = "0.2.10"
-edition = "2021"
+edition = "2024"
 authors = [ "IronShield Developers <software@ironshield.cloud>" ]
 description = "Standardized Types, Headers, & Methods for IronShield Bindings"
 license = "Apache-2.0"
@@ -16,18 +16,36 @@ serde_json = "1.0"
 hex = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.22.1"
-wasm-bindgen = { version = "0.2.100", features = ["serde-serialize"] }
-serde-wasm-bindgen = "0.6.5"
 ed25519-dalek = { version = "2.1", features = ["rand_core"]}
 rand = { version = "0.8", features = ["getrandom"] }
-web-sys = { version = "0.3", features = ["console"], optional = true }
+
+# WASM-related dependencies (optional)
+wasm-bindgen = { version = "0.2.100", features = ["serde-serialize"], optional = true }
+serde-wasm-bindgen = { version = "0.6.5", optional = true }
+js-sys = { version = "0.3", optional = true }
+web-sys = { version = "0.3", features = ["console", "Window", "Navigator"], optional = true }
+console_error_panic_hook = { version = "0.1.7", optional = true }
+getrandom = { version = "0.2", features = ["js"], optional = true }
+
+# OpenAPI-related dependencies (optional)
 utoipa = { version = "5", optional = true }
 
 [features]
 default = []
-wasm-logging = ["web-sys"]
+wasm = [
+    "wasm-bindgen", 
+    "serde-wasm-bindgen", 
+    "js-sys", 
+    "web-sys", 
+    "console_error_panic_hook",
+    "getrandom"
+]
+wasm-logging = ["wasm", "web-sys"]
 openapi = ["utoipa"]
 
 [lib]
 name = "ironshield_types"
 path = "src/lib.rs"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(rust_analyzer)'] }

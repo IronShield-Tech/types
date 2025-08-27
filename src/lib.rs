@@ -10,12 +10,18 @@ mod token;
 mod crypto;
 mod request;
 
+#[cfg(any(feature = "wasm", rust_analyzer))]
+pub mod js_bindings;
+
 pub use serde_utils::*;
 pub use challenge::*;
 pub use response::*;
 pub use request::*;
 pub use token::*;
 pub use crypto::*;
+
+#[cfg(any(feature = "wasm", rust_analyzer))]
+pub use js_bindings::*;
 
 // Re-export of the library chrono for convenience.
 pub use chrono;
