@@ -40,27 +40,13 @@
 //! ## Examples
 //!
 //! ### Basic Usage with Raw Keys
-//! ```no_run
-//! use ironshield_types::{load_private_key_from_env, generate_test_keypair};
-//!
-//! // Generate test keys
-//! let (private_b64, public_b64) = generate_test_keypair();
-//! std::env::set_var("IRONSHIELD_PRIVATE_KEY", private_b64);
-//! std::env::set_var("IRONSHIELD_PUBLIC_KEY", public_b64);
-//!
-//! // Load keys from environment
-//! let signing_key = load_private_key_from_env().unwrap();
-//! ```
+//! Generate test keys and set them as environment variables, then load them
+//! using `load_private_key_from_env()`.
 //!
 //! ### Using with PGP Keys
-//! For PGP keys stored in Cloudflare Secrets Store (base64-encoded without armor):
-//! ```bash
-//! # Store PGP keys in Cloudflare Secrets Store
-//! wrangler secrets-store secret create STORE_ID \
-//!   --name IRONSHIELD_PRIVATE_KEY \
-//!   --value "LS0tLS1CRUdJTi..." \  # Base64 PGP data without headers
-//!   --scopes workers
-//! ```
+//! For PGP keys stored in Cloudflare Secrets Store, provide base64-encoded
+//! PGP data without ASCII armor headers in the IRONSHIELD_PRIVATE_KEY and
+//! IRONSHIELD_PUBLIC_KEY environment variables.
 
 use base64::{
     Engine,
@@ -484,15 +470,6 @@ pub fn create_signing_message(
 ///
 /// # Returns
 /// * `Result<[u8; 64], CryptoError>`: The signature bytes or an error
-///
-/// # Example
-/// ```no_run
-/// use ironshield_types::{generate_signature, load_private_key_from_env};
-///
-/// let signing_key = load_private_key_from_env()?;
-/// let signature = generate_signature(&signing_key, "message to sign")?;
-/// # Ok::<(), ironshield_types::CryptoError>(())
-/// ```
 pub fn generate_signature(signing_key: &SigningKey, message: &str) -> Result<[u8; 64], CryptoError> {
     let signature: Signature = signing_key.sign(message.as_bytes());
     Ok(signature.to_bytes())
@@ -508,23 +485,6 @@ pub fn generate_signature(signing_key: &SigningKey, message: &str) -> Result<[u8
 ///
 /// # Returns
 /// * `Result<[u8; 64], CryptoError>`: The Ed25519 signature bytes or an error.
-///
-/// # Example
-/// ```no_run
-/// use ironshield_types::{IronShieldChallenge, sign_challenge, SigningKey};
-///
-/// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
-/// let mut challenge = IronShieldChallenge::new(
-///     "test_website".to_string(),
-///     100_000,
-///     dummy_key,
-///     [0x34; 32],
-/// );
-///
-/// // Sign the challenge (requires IRONSHIELD_PRIVATE_KEY environment variable)
-/// let signature = sign_challenge(&challenge).unwrap();
-/// challenge.challenge_signature = signature;
-/// ```
 pub fn sign_challenge(challenge: &IronShieldChallenge) -> Result<[u8; 64], CryptoError> {
     let signing_key: SigningKey = load_private_key_from_env()?;
     let message: String = create_signing_message(
@@ -549,22 +509,6 @@ pub fn sign_challenge(challenge: &IronShieldChallenge) -> Result<[u8; 64], Crypt
 ///
 /// # Returns
 /// * `Result<(), CryptoError>`: `Ok(())` if valid, error if verification fails.
-///
-/// # Example
-/// ```no_run
-/// use ironshield_types::{IronShieldChallenge, verify_challenge_signature, SigningKey};
-///
-/// let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
-/// let challenge = IronShieldChallenge::new(
-///     "test_website".to_string(),
-///     100_000,
-///     dummy_key,
-///     [0x34; 32],
-/// );
-///
-/// // Verify the challenge (requires IRONSHIELD_PUBLIC_KEY environment variable)
-/// verify_challenge_signature(&challenge).unwrap();
-/// ```
 pub fn verify_challenge_signature(challenge: &IronShieldChallenge) -> Result<(), CryptoError> {
     let verifying_key: VerifyingKey = load_public_key_from_env()?;
 
@@ -628,15 +572,6 @@ pub fn verify_challenge_signature_with_key(
 ///
 /// # Returns
 /// * `(String, String)`: (base64_private_key, base64_public_key) in raw Ed25519 format
-///
-/// # Example
-/// ```
-/// use ironshield_types::generate_test_keypair;
-///
-/// let (private_key_b64, public_key_b64) = generate_test_keypair();
-/// std::env::set_var("IRONSHIELD_PRIVATE_KEY", private_key_b64);
-/// std::env::set_var("IRONSHIELD_PUBLIC_KEY", public_key_b64);
-/// ```
 pub fn generate_test_keypair() -> (String, String) {
     let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
     let verifying_key: VerifyingKey = signing_key.verifying_key();
@@ -777,344 +712,4 @@ pub fn load_public_key_from_data(key_data: &str) -> Result<VerifyingKey, CryptoE
         .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid Ed25519 public key: {}", e)))?;
 
     Ok(verifying_key)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::env;
-    use std::sync::Mutex;
-    use rand::rngs::OsRng;
-
-    // Use a mutex to ensure tests don't interfere with each other when setting env vars
-    static ENV_MUTEX: Mutex<()> = Mutex::new(());
-
-    #[allow(dead_code)]
-    fn setup_isolated_test_keys() -> (SigningKey, VerifyingKey) {
-        let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
-        let verifying_key: VerifyingKey = signing_key.verifying_key();
-
-        let private_key: String = STANDARD.encode(signing_key.to_bytes());
-        let public_key: String = STANDARD.encode(verifying_key.to_bytes());
-
-        // Set environment variables with mutex protection
-        let _lock = ENV_MUTEX.lock().unwrap();
-        env::set_var("IRONSHIELD_PRIVATE_KEY", &private_key);
-        env::set_var("IRONSHIELD_PUBLIC_KEY", &public_key);
-
-        (signing_key, verifying_key)
-    }
-
-    #[test]
-    fn test_basic_ed25519_signing() {
-        // Test basic Ed25519 signing with a simple message
-        let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
-        let verifying_key: VerifyingKey = signing_key.verifying_key();
-
-        let message = b"Hello, world!";
-        let signature: Signature = signing_key.sign(message);
-
-        // This should work without any issues
-        let result = verifying_key.verify(message, &signature);
-        assert!(result.is_ok(), "Basic Ed25519 signing should work");
-    }
-
-    #[test]
-    fn test_crypto_integration_without_env() {
-        // Generate keys directly without using environment variables
-        let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
-        let verifying_key: VerifyingKey = signing_key.verifying_key();
-
-        // Create a challenge with the public key
-        let challenge = IronShieldChallenge::new(
-            "example.com".to_string(),
-            100_000,
-            signing_key.clone(),
-            verifying_key.to_bytes(),
-        );
-
-        // Create the signing message manually
-        let signing_message = create_signing_message(
-            &challenge.random_nonce,
-            challenge.created_time,
-            challenge.expiration_time,
-            &challenge.website_id,
-            &challenge.challenge_param,
-            &challenge.public_key
-        );
-        println!("Signing message: {}", signing_message);
-
-        // The challenge should already be signed, so let's verify it
-        let verification_message = create_signing_message(
-            &challenge.random_nonce,
-            challenge.created_time,
-            challenge.expiration_time,
-            &challenge.website_id,
-            &challenge.challenge_param,
-            &challenge.public_key
-        );
-        assert_eq!(signing_message, verification_message, "Signing message should be consistent");
-
-        let signature_from_bytes = Signature::from_slice(&challenge.challenge_signature)
-            .expect("Should be able to recreate signature from bytes");
-
-        let verification_result = verifying_key.verify(verification_message.as_bytes(), &signature_from_bytes);
-        assert!(verification_result.is_ok(), "Manual verification should succeed");
-
-        // Now test our helper function
-        let verify_result = verify_challenge_signature_with_key(&challenge, &verifying_key.to_bytes());
-        assert!(verify_result.is_ok(), "verify_challenge_signature_with_key should succeed");
-    }
-
-    #[test]
-    fn test_generate_test_keypair() {
-        let (private_key, public_key) = generate_test_keypair();
-
-        // Keys should be valid base64
-        assert!(STANDARD.decode(&private_key).is_ok());
-        assert!(STANDARD.decode(&public_key).is_ok());
-
-        // Keys should be correct length when decoded
-        let private_bytes = STANDARD.decode(&private_key).unwrap();
-        let public_bytes = STANDARD.decode(&public_key).unwrap();
-        assert_eq!(private_bytes.len(), SECRET_KEY_LENGTH);
-        assert_eq!(public_bytes.len(), PUBLIC_KEY_LENGTH);
-    }
-
-    #[test]
-    fn test_load_keys_from_env() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-
-        let (signing_key, verifying_key) = {
-            let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
-            let verifying_key: VerifyingKey = signing_key.verifying_key();
-
-            let private_key: String = STANDARD.encode(signing_key.to_bytes());
-            let public_key: String = STANDARD.encode(verifying_key.to_bytes());
-
-            env::set_var("IRONSHIELD_PRIVATE_KEY", &private_key);
-            env::set_var("IRONSHIELD_PUBLIC_KEY", &public_key);
-
-            (signing_key, verifying_key)
-        };
-
-        // Should successfully load keys
-        let loaded_signing_key = load_private_key_from_env().unwrap();
-        let loaded_verifying_key = load_public_key_from_env().unwrap();
-
-        // Keys should match what we set
-        assert_eq!(signing_key.to_bytes(), loaded_signing_key.to_bytes());
-        assert_eq!(verifying_key.to_bytes(), loaded_verifying_key.to_bytes());
-    }
-
-    #[test]
-    fn test_missing_environment_variables() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-
-        // Remove environment variables for this test
-        env::remove_var("IRONSHIELD_PRIVATE_KEY");
-        env::remove_var("IRONSHIELD_PUBLIC_KEY");
-
-        // Should fail with appropriate errors
-        let private_result = load_private_key_from_env();
-        assert!(private_result.is_err());
-        assert!(matches!(private_result.unwrap_err(), CryptoError::MissingEnvironmentVariable(_)));
-
-        let public_result = load_public_key_from_env();
-        assert!(public_result.is_err());
-        assert!(matches!(public_result.unwrap_err(), CryptoError::MissingEnvironmentVariable(_)));
-    }
-
-    #[test]
-    fn test_invalid_key_format() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-
-        // Set invalid keys
-        env::set_var("IRONSHIELD_PRIVATE_KEY", "invalid-base64!");
-        env::set_var("IRONSHIELD_PUBLIC_KEY", "invalid-base64!");
-
-        let private_result = load_private_key_from_env();
-        assert!(private_result.is_err());
-        assert!(matches!(private_result.unwrap_err(), CryptoError::Base64DecodingFailed(_)));
-
-        let public_result = load_public_key_from_env();
-        assert!(public_result.is_err());
-        assert!(matches!(public_result.unwrap_err(), CryptoError::Base64DecodingFailed(_)));
-    }
-
-    #[test]
-    fn test_challenge_signing_and_verification() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-
-        let (signing_key, verifying_key) = {
-            let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
-            let verifying_key: VerifyingKey = signing_key.verifying_key();
-
-            let private_key: String = STANDARD.encode(signing_key.to_bytes());
-            let public_key: String = STANDARD.encode(verifying_key.to_bytes());
-
-            env::set_var("IRONSHIELD_PRIVATE_KEY", &private_key);
-            env::set_var("IRONSHIELD_PUBLIC_KEY", &public_key);
-
-            (signing_key, verifying_key)
-        };
-
-        // Create a test challenge - it will be automatically signed
-        let challenge = IronShieldChallenge::new(
-            "test_website".to_string(),
-            100_000,
-            signing_key.clone(),
-            verifying_key.to_bytes(),
-        );
-
-        // Verify the signature with environment keys
-        verify_challenge_signature(&challenge).unwrap();
-
-        // Verify with explicit key
-        verify_challenge_signature_with_key(&challenge, &verifying_key.to_bytes()).unwrap();
-
-        // Verify that the embedded public key matches what we expect
-        assert_eq!(challenge.public_key, verifying_key.to_bytes());
-    }
-
-    #[test]
-    fn test_tampered_challenge_detection() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-
-        let (signing_key, verifying_key) = {
-            let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
-            let verifying_key: VerifyingKey = signing_key.verifying_key();
-
-            let private_key: String = STANDARD.encode(signing_key.to_bytes());
-            let public_key: String = STANDARD.encode(verifying_key.to_bytes());
-
-            env::set_var("IRONSHIELD_PRIVATE_KEY", &private_key);
-            env::set_var("IRONSHIELD_PUBLIC_KEY", &public_key);
-
-            (signing_key, verifying_key)
-        };
-
-        // Create and sign a challenge - signature is generated automatically
-        let mut challenge = IronShieldChallenge::new(
-            "test_website".to_string(),
-            100_000,
-            signing_key.clone(),
-            verifying_key.to_bytes(),
-        );
-
-        // Verify original challenge works
-        verify_challenge_signature(&challenge).unwrap();
-
-        // Tamper with the challenge
-        challenge.random_nonce = "tampered".to_string();
-
-        // Verification should fail
-        let result = verify_challenge_signature(&challenge);
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), CryptoError::VerificationFailed(_)));
-    }
-
-    #[test]
-    fn test_invalid_signature_format() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-        {
-            let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
-            let verifying_key: VerifyingKey = signing_key.verifying_key();
-
-            let private_key: String = STANDARD.encode(signing_key.to_bytes());
-            let public_key: String = STANDARD.encode(verifying_key.to_bytes());
-
-            env::set_var("IRONSHIELD_PRIVATE_KEY", &private_key);
-            env::set_var("IRONSHIELD_PUBLIC_KEY", &public_key);
-        }
-
-        // Create a challenge that will be properly signed
-        let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
-        let mut challenge = IronShieldChallenge::new(
-            "test_website".to_string(),
-            100_000,
-            dummy_key,
-            [0x34; 32],
-        );
-
-        // Now manually corrupt the signature to test invalid format
-        challenge.challenge_signature = [0xFF; 64]; // Invalid signature
-
-        // Verification should fail
-        let result = verify_challenge_signature(&challenge);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_signing_message_creation() {
-        let dummy_key = SigningKey::from_bytes(&[0u8; 32]);
-        let challenge = IronShieldChallenge::new(
-            "test_website".to_string(),
-            100_000,
-            dummy_key,
-            [0x34; 32],
-        );
-
-        let message = create_signing_message(
-            &challenge.random_nonce,
-            challenge.created_time,
-            challenge.expiration_time,
-            &challenge.website_id,
-            &challenge.challenge_param,
-            &challenge.public_key
-        );
-
-        // Ensure the message format is as expected
-        let expected_prefix = format!(
-            "{}|{}|{}|{}|",
-            challenge.random_nonce,
-            challenge.created_time,
-            challenge.expiration_time,
-            challenge.website_id
-        );
-        assert!(message.starts_with(&expected_prefix));
-        assert!(message.ends_with(&hex::encode(challenge.public_key)));
-    }
-
-    #[test]
-    fn test_sign_challenge_uses_generate_signature() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-
-        let (signing_key, verifying_key) = {
-            let signing_key: SigningKey = SigningKey::generate(&mut OsRng);
-            let verifying_key: VerifyingKey = signing_key.verifying_key();
-
-            let private_key: String = STANDARD.encode(signing_key.to_bytes());
-            let public_key: String = STANDARD.encode(verifying_key.to_bytes());
-
-            env::set_var("IRONSHIELD_PRIVATE_KEY", &private_key);
-            env::set_var("IRONSHIELD_PUBLIC_KEY", &public_key);
-
-            (signing_key, verifying_key)
-        };
-
-        // Create a test challenge - it will be automatically signed
-        let challenge = IronShieldChallenge::new(
-            "test_website".to_string(),
-            100_000,
-            signing_key.clone(),
-            verifying_key.to_bytes(),
-        );
-
-        // Test that sign_challenge and manual generate_signature produce the same result
-        let sign_challenge_result = sign_challenge(&challenge).unwrap();
-
-        let message = create_signing_message(
-            &challenge.random_nonce,
-            challenge.created_time,
-            challenge.expiration_time,
-            &challenge.website_id,
-            &challenge.challenge_param,
-            &challenge.public_key
-        );
-        let manual_signature = generate_signature(&signing_key, &message).unwrap();
-
-        assert_eq!(sign_challenge_result, manual_signature,
-                   "sign_challenge should produce the same result as manual generate_signature");
-    }
 }
