@@ -31,8 +31,7 @@ getrandom = { version = "0.2", features = ["js"], optional = true }
 utoipa = { version = "5", optional = true }
 
 # PGP parsing
-# Use crypto-rust (pure Rust) instead of crypto-nettle to avoid system dependencies
-sequoia-openpgp = { version = "1.21", default-features = false, features = ["crypto-rust"] }
+sequoia-openpgp = { version = "1.21", default-features = false, features = ["crypto-nettle"] }
 
 [features]
 default = []
