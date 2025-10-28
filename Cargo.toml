@@ -30,12 +30,11 @@ getrandom = { version = "0.2", features = ["js"], optional = true }
 # OpenAPI-related dependencies (optional)
 utoipa = { version = "5", optional = true }
 
-# PGP parsing (optional)
-sequoia-openpgp = { version = "1.21", optional = true, default-features = false, features = ["crypto-nettle"] }
+# PGP parsing
+sequoia-openpgp = { version = "1.21", default-features = false, features = ["crypto-nettle"] }
 
 [features]
 default = []
-pgp-parsing = ["sequoia-openpgp"]
 wasm = [
     "wasm-bindgen", 
     "serde-wasm-bindgen", 

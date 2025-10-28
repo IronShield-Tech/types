@@ -109,83 +109,160 @@ impl std::fmt::Display for CryptoError {
 
 impl std::error::Error for CryptoError {}
 
-/// Parse key data with simple heuristic approach (handles PGP and raw Ed25519)
+/// Parse key data using sequoia-openpgp
 ///
 /// This function attempts to extract Ed25519 key material from various formats:
-/// 1. PGP armored text (base64 with possible line breaks)
-/// 2. Raw base64-encoded Ed25519 keys (32 bytes)
+/// 1. ASCII-armored PGP keys (with -----BEGIN PGP----- headers)
+/// 2. Base64-encoded PGP binary data (without armor)
+/// 3. Raw base64-encoded Ed25519 keys (32 bytes, legacy fallback)
 ///
 /// # Arguments
-/// * `key_data`:   Key data as string (PGP armored or raw base64)
-/// * `is_private`: Whether this is a private key (for validation)
+/// * `key_data`:   Key data as string
+/// * `is_private`: Whether this is a private key
 ///
 /// # Returns
-/// * `Result<[u8; 32], CryptoError>`: The 32-byte Ed25519 key
-fn parse_key_simple(key_data: &str, is_private: bool) -> Result<[u8; 32], CryptoError> {
-    // Clean the key data by removing all whitespace, line breaks, and common PGP formatting
-    let cleaned_data = key_data
-        .chars()
-        .filter(|c| !c.is_whitespace()) // Remove all whitespace including \n, \r, \t, spaces
-        .collect::<String>();
-
-    debug_log!("Parsing key data: {} chars -> {} chars after cleaning", key_data.len(), cleaned_data.len());
-
-    // Check for any invalid base64 characters
-    let invalid_chars: Vec<char> = cleaned_data
-        .chars()
-        .filter(|&c| !matches!(c, 'A'..='Z' | 'a'..='z' | '0'..='9' | '+' | '/' | '='))
-        .collect();
-
-    if !invalid_chars.is_empty() {
-        debug_log!("Fixing {} invalid base64 characters", invalid_chars.len());
-
-        // Try to fix common issues
-        let fixed_data = cleaned_data
-            .chars()
-            .filter(|&c| matches!(c, 'A'..='Z' | 'a'..='z' | '0'..='9' | '+' | '/' | '='))
-            .collect::<String>();
-
-        debug_log!("Fixed data length: {}", fixed_data.len());
-
-        // Try to decode the fixed data
-        match STANDARD.decode(&fixed_data) {
-            Ok(key_bytes) => {
-                debug_log!("Fixed data decoded to {} bytes", key_bytes.len());
-                return try_extract_ed25519_key(&key_bytes, is_private);
+/// * `Result<[u8; 32], CryptoError>`: The 32-byte Ed25519 key material
+fn parse_key(key_data: &str, is_private: bool) -> Result<[u8; 32], CryptoError> {
+    use sequoia_openpgp::{Cert, parse::Parse};
+    
+    debug_log!("Parsing key data: {} chars", key_data.len());
+    
+    // Try to parse as PGP certificate (handles both ASCII-armored and binary)
+    match Cert::from_bytes(key_data.as_bytes()) {
+        Ok(cert) => {
+            debug_log!("Successfully parsed as PGP certificate");
+            return extract_ed25519_key_from_cert(&cert, is_private);
+        }
+        Err(_) => {
+            debug_log!("Not a PGP certificate, trying base64 decode");
+        }
+    }
+    
+    // Try to decode as base64 and parse as binary PGP
+    if let Ok(decoded) = STANDARD.decode(key_data.trim()) {
+        debug_log!("Decoded base64 to {} bytes", decoded.len());
+        
+        // Try as binary PGP certificate
+        match Cert::from_bytes(&decoded) {
+            Ok(cert) => {
+                debug_log!("Successfully parsed binary PGP certificate");
+                return extract_ed25519_key_from_cert(&cert, is_private);
             }
-            Err(e) => {
-                debug_log!("Fixed data decode failed: {}", e);
+            Err(_) => {
+                debug_log!("Not binary PGP, checking for raw Ed25519 key");
+                
+                // Fallback: raw 32-byte Ed25519 key (legacy support)
+                if decoded.len() == 32 {
+                    debug_log!("Detected raw 32-byte Ed25519 key");
+                    let mut key_array = [0u8; 32];
+                    key_array.copy_from_slice(&decoded);
+                    
+                    // Validate it's a proper Ed25519 key
+                    // For private keys, just creating a SigningKey validates it
+                    // For public keys, we need to check with VerifyingKey
+                    if is_private {
+                        let _signing_key = SigningKey::from_bytes(&key_array);
+                        debug_log!("Raw Ed25519 private key validated");
+                    } else {
+                        VerifyingKey::from_bytes(&key_array)
+                            .map_err(|e| CryptoError::InvalidKeyFormat(
+                                format!("Invalid raw Ed25519 public key: {}", e)
+                            ))?;
+                        debug_log!("Raw Ed25519 public key validated");
+                    }
+                    
+                    return Ok(key_array);
+                }
             }
         }
     }
-
-    // Try to decode as base64
-    let key_bytes = match STANDARD.decode(&cleaned_data) {
-        Ok(bytes) => {
-            debug_log!("Base64 decoded to {} bytes", bytes.len());
-            bytes
-        }
-        Err(e) => {
-            debug_log!("Base64 decode failed: {}", e);
-
-            // Try removing trailing characters that might be corrupted
-            let mut test_data = cleaned_data.clone();
-            while !test_data.is_empty() {
-                if let Ok(bytes) = STANDARD.decode(&test_data) {
-                    debug_log!("Successful decode after trimming to {} chars -> {} bytes", test_data.len(), bytes.len());
-                    return try_extract_ed25519_key(&bytes, is_private);
-                }
-                test_data.pop();
-            }
-
-            return Err(CryptoError::Base64DecodingFailed(format!("Failed to decode cleaned key data: {}", e)));
-        }
-    };
-
-    try_extract_ed25519_key(&key_bytes, is_private)
+    
+    Err(CryptoError::PgpParsingFailed(
+        "Could not parse as PGP certificate or raw Ed25519 key".to_string()
+    ))
 }
 
-/// Extract Ed25519 key material from decoded bytes
+/// Extract Ed25519 key material from a sequoia-openpgp certificate
+fn extract_ed25519_key_from_cert(cert: &sequoia_openpgp::Cert, is_private: bool) -> Result<[u8; 32], CryptoError> {
+    use sequoia_openpgp::serialize::Marshal;
+    
+    // Get the primary key from the certificate
+    let primary_key = cert.primary_key().key();
+    
+    // Serialize the public key MPIs (multiprecision integers) to a Vec
+    let mut mpi_bytes = Vec::new();
+    primary_key.mpis().serialize(&mut mpi_bytes)
+        .map_err(|e| CryptoError::PgpParsingFailed(
+            format!("Failed to serialize key MPIs: {}", e)
+        ))?;
+    
+    debug_log!("Key MPI bytes: {} bytes", mpi_bytes.len());
+    
+    // For Ed25519 keys, the MPI format is:
+    // [length_bits_high_byte, length_bits_low_byte, ...key_bytes...]
+    // For Ed25519: [0x00, 0x20] (32 bytes) or [0x01, 0x00] (256 bits) followed by 32 bytes
+    // Or sometimes just [0x40, 0x20, ...32 bytes...]
+    
+    // Look for the 32-byte Ed25519 key in the MPI data
+    // Common patterns:
+    // - [0x00, 0x20, ...32 bytes...] (length = 32)
+    // - [0x01, 0x00, ...32 bytes...] (length = 256 bits)
+    // - [0x40, 0x20, ...32 bytes...] (40 hex = 64 decimal, 20 hex = 32 decimal)
+    
+    if mpi_bytes.len() >= 34 {
+        // Try pattern: [0x00, 0x20, ...] or [0x01, 0x00, ...]
+        if (mpi_bytes[0] == 0x00 && mpi_bytes[1] == 0x20) ||
+           (mpi_bytes[0] == 0x01 && mpi_bytes[1] == 0x00) ||
+           (mpi_bytes[0] == 0x40 && mpi_bytes[1] == 0x20) {
+            
+            let mut key_array = [0u8; 32];
+            key_array.copy_from_slice(&mpi_bytes[2..34]);
+            
+            // Validate it's a proper Ed25519 key
+            if is_private {
+                let _signing_key = SigningKey::from_bytes(&key_array);
+                debug_log!("Ed25519 private key validated from PGP certificate");
+            } else {
+                VerifyingKey::from_bytes(&key_array)
+                    .map_err(|e| CryptoError::InvalidKeyFormat(
+                        format!("Invalid Ed25519 public key from PGP: {}", e)
+                    ))?;
+                debug_log!("Ed25519 public key validated from PGP certificate");
+            }
+            
+            debug_log!("Successfully extracted Ed25519 key from PGP certificate");
+            return Ok(key_array);
+        }
+    }
+    
+    // If the MPI is exactly 32 bytes, it might be the raw key
+    if mpi_bytes.len() == 32 {
+        let mut key_array = [0u8; 32];
+        key_array.copy_from_slice(&mpi_bytes);
+        
+        // Validate the key
+        if is_private {
+            let _signing_key = SigningKey::from_bytes(&key_array);
+            debug_log!("Raw 32-byte private key validated from PGP");
+        } else {
+            VerifyingKey::from_bytes(&key_array)
+                .map_err(|e| CryptoError::InvalidKeyFormat(
+                    format!("Invalid Ed25519 public key from PGP: {}", e)
+                ))?;
+            debug_log!("Raw 32-byte public key validated from PGP");
+        }
+        
+        debug_log!("Extracted raw 32-byte Ed25519 key from PGP");
+        return Ok(key_array);
+    }
+    
+    Err(CryptoError::PgpParsingFailed(
+        format!("Unexpected key format in PGP certificate: {} bytes, expected Ed25519", mpi_bytes.len())
+    ))
+}
+
+/// Extract Ed25519 key material from decoded bytes (old heuristic method, kept for reference)
+#[allow(dead_code)]
 fn try_extract_ed25519_key(key_bytes: &[u8], is_private: bool) -> Result<[u8; 32], CryptoError> {
     debug_log!("Extracting Ed25519 key from {} bytes", key_bytes.len());
 
@@ -346,7 +423,7 @@ pub fn load_private_key(key_data: Option<&str>) -> Result<SigningKey, CryptoErro
         debug_log!("Attempting to load private key from provided data");
         
         // Try PGP format first
-        match parse_key_simple(data, true) {
+        match parse_key(data, true) {
             Ok(key_array) => {
                 let signing_key = SigningKey::from_bytes(&key_array);
                 debug_log!("Successfully loaded private key from provided data");
@@ -387,7 +464,7 @@ pub fn load_private_key(key_data: Option<&str>) -> Result<SigningKey, CryptoErro
         .map_err(|_| CryptoError::MissingEnvironmentVariable("IRONSHIELD_PRIVATE_KEY".to_string()))?;
 
     // Try PGP format first
-    match parse_key_simple(&key_str, true) {
+    match parse_key(&key_str, true) {
         Ok(key_array) => {
             let signing_key = SigningKey::from_bytes(&key_array);
             debug_log!("Successfully loaded private key from environment variable");
@@ -443,7 +520,7 @@ pub fn load_public_key(key_data: Option<&str>) -> Result<VerifyingKey, CryptoErr
         debug_log!("Attempting to load public key from provided data");
         
         // Try PGP format first
-        match parse_key_simple(data, false) {
+        match parse_key(data, false) {
             Ok(key_array) => {
                 let verifying_key = VerifyingKey::from_bytes(&key_array)
                     .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid public key from PGP: {}", e)))?;
@@ -491,7 +568,7 @@ pub fn load_public_key(key_data: Option<&str>) -> Result<VerifyingKey, CryptoErr
         .map_err(|_| CryptoError::MissingEnvironmentVariable("IRONSHIELD_PUBLIC_KEY".to_string()))?;
 
     // Try PGP format first
-    match parse_key_simple(&key_str, false) {
+    match parse_key(&key_str, false) {
         Ok(key_array) => {
             let verifying_key = VerifyingKey::from_bytes(&key_array)
                 .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid public key: {}", e)))?;
@@ -723,7 +800,7 @@ mod tests {
         let (private_b64, _) = generate_test_keypair();
         
         // Parse the private key
-        let result = parse_key_simple(&private_b64, true);
+        let result = parse_key(&private_b64, true);
         assert!(result.is_ok(), "Failed to parse raw Ed25519 private key");
         
         let key_bytes = result.unwrap();
@@ -743,7 +820,7 @@ mod tests {
         let (_, public_b64) = generate_test_keypair();
         
         // Parse the public key
-        let result = parse_key_simple(&public_b64, false);
+        let result = parse_key(&public_b64, false);
         assert!(result.is_ok(), "Failed to parse raw Ed25519 public key");
         
         let key_bytes = result.unwrap();
@@ -756,7 +833,7 @@ mod tests {
         println!("Successfully parsed raw Ed25519 public key");
     }
 
-    /// Test that parse_key_simple handles whitespace correctly
+    /// Test that parse_key handles whitespace correctly
     #[test]
     fn test_parse_key_with_whitespace() {
         let (private_b64, _) = generate_test_keypair();
@@ -768,7 +845,7 @@ mod tests {
         let with_mixed = format!("\n  {}\t\n  ", private_b64);
         
         for key_str in [with_spaces, with_newlines, with_tabs, with_mixed] {
-            let result = parse_key_simple(&key_str, true);
+            let result = parse_key(&key_str, true);
             assert!(
                 result.is_ok(),
                 "Should handle whitespace, got error: {:?}",
@@ -784,7 +861,7 @@ mod tests {
     fn test_parse_invalid_base64() {
         let invalid_base64 = "this is not valid base64!!!@#$%";
         
-        let result = parse_key_simple(invalid_base64, true);
+        let result = parse_key(invalid_base64, true);
         assert!(result.is_err(), "Should fail on invalid base64");
         
         // Accept either Base64DecodingFailed or PgpParsingFailed since the function
@@ -803,7 +880,7 @@ mod tests {
         // Create a base64 string that decodes to wrong number of bytes
         let wrong_size = STANDARD.encode(&[0u8; 16]); // Only 16 bytes instead of 32
         
-        let result = parse_key_simple(&wrong_size, true);
+        let result = parse_key(&wrong_size, true);
         assert!(result.is_err(), "Should fail on wrong-sized key");
         
         println!("Correctly rejected wrong-sized key");
@@ -815,11 +892,11 @@ mod tests {
         let (private_b64, public_b64) = generate_test_keypair();
         
         // Parse private key as private - should work
-        let result = parse_key_simple(&private_b64, true);
+        let result = parse_key(&private_b64, true);
         assert!(result.is_ok(), "Private key should parse as private");
         
         // Parse public key as public - should work
-        let result = parse_key_simple(&public_b64, false);
+        let result = parse_key(&public_b64, false);
         assert!(result.is_ok(), "Public key should parse as public");
         
         println!("Correctly validated private vs public keys");
@@ -827,14 +904,14 @@ mod tests {
 
     /// Test the complete flow: generate, parse, sign, verify
     #[test]
-    fn test_parse_key_simple_end_to_end() {
+    fn test_parse_key_end_to_end() {
         // Generate a keypair
         let (private_b64, public_b64) = generate_test_keypair();
         
         // Parse both keys
-        let private_bytes = parse_key_simple(&private_b64, true)
+        let private_bytes = parse_key(&private_b64, true)
             .expect("Failed to parse private key");
-        let public_bytes = parse_key_simple(&public_b64, false)
+        let public_bytes = parse_key(&public_b64, false)
             .expect("Failed to parse public key");
         
         // Create Ed25519 keys
@@ -865,7 +942,7 @@ mod tests {
     /// Test empty input handling
     #[test]
     fn test_parse_empty_string() {
-        let result = parse_key_simple("", true);
+        let result = parse_key("", true);
         assert!(result.is_err(), "Should fail on empty string");
         
         println!("Correctly rejected empty string");
