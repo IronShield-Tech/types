@@ -129,7 +129,7 @@ fn parse_key_simple(key_data: &str, is_private: bool) -> Result<[u8; 32], Crypto
         .filter(|c| !c.is_whitespace()) // Remove all whitespace including \n, \r, \t, spaces
         .collect::<String>();
 
-    debug_log!("🔑 Parsing key data: {} chars → {} chars after cleaning", key_data.len(), cleaned_data.len());
+    debug_log!("Parsing key data: {} chars -> {} chars after cleaning", key_data.len(), cleaned_data.len());
 
     // Check for any invalid base64 characters
     let invalid_chars: Vec<char> = cleaned_data
@@ -138,7 +138,7 @@ fn parse_key_simple(key_data: &str, is_private: bool) -> Result<[u8; 32], Crypto
         .collect();
 
     if !invalid_chars.is_empty() {
-        debug_log!("🔧 Fixing {} invalid base64 characters", invalid_chars.len());
+        debug_log!("Fixing {} invalid base64 characters", invalid_chars.len());
 
         // Try to fix common issues
         let fixed_data = cleaned_data
@@ -146,16 +146,16 @@ fn parse_key_simple(key_data: &str, is_private: bool) -> Result<[u8; 32], Crypto
             .filter(|&c| matches!(c, 'A'..='Z' | 'a'..='z' | '0'..='9' | '+' | '/' | '='))
             .collect::<String>();
 
-        debug_log!("🔧 Fixed data length: {}", fixed_data.len());
+        debug_log!("Fixed data length: {}", fixed_data.len());
 
         // Try to decode the fixed data
         match STANDARD.decode(&fixed_data) {
             Ok(key_bytes) => {
-                debug_log!("✅ Fixed data decoded to {} bytes", key_bytes.len());
+                debug_log!("Fixed data decoded to {} bytes", key_bytes.len());
                 return try_extract_ed25519_key(&key_bytes, is_private);
             }
             Err(e) => {
-                debug_log!("⚠️ Fixed data decode failed: {}", e);
+                debug_log!("Fixed data decode failed: {}", e);
             }
         }
     }
@@ -163,17 +163,17 @@ fn parse_key_simple(key_data: &str, is_private: bool) -> Result<[u8; 32], Crypto
     // Try to decode as base64
     let key_bytes = match STANDARD.decode(&cleaned_data) {
         Ok(bytes) => {
-            debug_log!("✅ Base64 decoded to {} bytes", bytes.len());
+            debug_log!("Base64 decoded to {} bytes", bytes.len());
             bytes
         }
         Err(e) => {
-            debug_log!("⚠️ Base64 decode failed: {}", e);
+            debug_log!("Base64 decode failed: {}", e);
 
             // Try removing trailing characters that might be corrupted
             let mut test_data = cleaned_data.clone();
             while !test_data.is_empty() {
                 if let Ok(bytes) = STANDARD.decode(&test_data) {
-                    debug_log!("✅ Successful decode after trimming to {} chars → {} bytes", test_data.len(), bytes.len());
+                    debug_log!("Successful decode after trimming to {} chars -> {} bytes", test_data.len(), bytes.len());
                     return try_extract_ed25519_key(&bytes, is_private);
                 }
                 test_data.pop();
@@ -188,7 +188,7 @@ fn parse_key_simple(key_data: &str, is_private: bool) -> Result<[u8; 32], Crypto
 
 /// Extract Ed25519 key material from decoded bytes
 fn try_extract_ed25519_key(key_bytes: &[u8], is_private: bool) -> Result<[u8; 32], CryptoError> {
-    debug_log!("🔑 Extracting Ed25519 key from {} bytes", key_bytes.len());
+    debug_log!("Extracting Ed25519 key from {} bytes", key_bytes.len());
 
     // If it's exactly 32 bytes, it might be a raw Ed25519 key
     if key_bytes.len() == 32 {
@@ -198,11 +198,11 @@ fn try_extract_ed25519_key(key_bytes: &[u8], is_private: bool) -> Result<[u8; 32
         // Validate the key
         if is_private {
             let _signing_key = SigningKey::from_bytes(&key_array);
-            debug_log!("✅ Raw Ed25519 private key validated");
+            debug_log!("Raw Ed25519 private key validated");
         } else {
             let _verifying_key = VerifyingKey::from_bytes(&key_array)
                 .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid raw public key: {}", e)))?;
-            debug_log!("✅ Raw Ed25519 public key validated");
+            debug_log!("Raw Ed25519 public key validated");
         }
 
         return Ok(key_array);
@@ -210,7 +210,7 @@ fn try_extract_ed25519_key(key_bytes: &[u8], is_private: bool) -> Result<[u8; 32
 
     // For larger data (PGP format), use multiple sophisticated key extraction strategies
     if key_bytes.len() >= 32 {
-        debug_log!("🔍 Scanning PGP data for Ed25519 key...");
+        debug_log!("Scanning PGP data for Ed25519 key...");
 
         // Strategy 1: Look for Ed25519 algorithm identifier (0x16 = 22 decimal)
         // Ed25519 keys in PGP often have specific patterns
@@ -239,14 +239,14 @@ fn try_extract_ed25519_key(key_bytes: &[u8], is_private: bool) -> Result<[u8; 32
                 if search_start < key_bytes.len() {
                     let remaining_data = &key_bytes[search_start..];
                     if remaining_data.windows(32).any(|window| window == public_bytes) {
-                        debug_log!("✅ Private key found at offset {} (with matching public key)", window_start);
+                        debug_log!("Private key found at offset {} (with matching public key)", window_start);
                         return Ok(key_array);
                     }
                 }
 
                 // Even if we don't find the public key, if this is at a reasonable offset, it might be valid
                 if window_start >= 20 && window_start <= 200 {
-                    debug_log!("✅ Private key found at offset {}", window_start);
+                    debug_log!("Private key found at offset {}", window_start);
                     return Ok(key_array);
                 }
             } else {
@@ -254,7 +254,7 @@ fn try_extract_ed25519_key(key_bytes: &[u8], is_private: bool) -> Result<[u8; 32
                 if let Ok(_verifying_key) = VerifyingKey::from_bytes(&key_array) {
                     // Additional validation: public keys should appear after some PGP header data
                     if window_start >= 10 && window_start <= 100 {
-                        debug_log!("✅ Public key found at offset {}", window_start);
+                        debug_log!("Public key found at offset {}", window_start);
                         return Ok(key_array);
                     }
                 }
@@ -273,11 +273,11 @@ fn try_extract_ed25519_key(key_bytes: &[u8], is_private: bool) -> Result<[u8; 32
                     // Validate this key
                     if is_private {
                         let _signing_key = SigningKey::from_bytes(&key_array);
-                        debug_log!("✅ Private key found via algorithm ID at offset {}", key_start);
+                        debug_log!("Private key found via algorithm ID at offset {}", key_start);
                         return Ok(key_array);
                     } else {
                         if let Ok(_verifying_key) = VerifyingKey::from_bytes(&key_array) {
-                            debug_log!("✅ Public key found via algorithm ID at offset {}", key_start);
+                            debug_log!("Public key found via algorithm ID at offset {}", key_start);
                             return Ok(key_array);
                         }
                     }
@@ -305,11 +305,11 @@ fn try_extract_ed25519_key(key_bytes: &[u8], is_private: bool) -> Result<[u8; 32
 
                 if is_private {
                     let _signing_key = SigningKey::from_bytes(&key_array);
-                    debug_log!("✅ Private key found at common offset {}", offset);
+                    debug_log!("Private key found at common offset {}", offset);
                     return Ok(key_array);
                 } else {
                     if let Ok(_verifying_key) = VerifyingKey::from_bytes(&key_array) {
-                        debug_log!("✅ Public key found at common offset {}", offset);
+                        debug_log!("Public key found at common offset {}", offset);
                         return Ok(key_array);
                     }
                 }
@@ -713,3 +713,164 @@ pub fn load_public_key_from_data(key_data: &str) -> Result<VerifyingKey, CryptoE
 
     Ok(verifying_key)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test parsing a raw 32-byte Ed25519 private key
+    #[test]
+    fn test_parse_raw_ed25519_private_key() {
+        // Generate a test keypair
+        let (private_b64, _) = generate_test_keypair();
+        
+        // Parse the private key
+        let result = parse_key_simple(&private_b64, true);
+        assert!(result.is_ok(), "Failed to parse raw Ed25519 private key");
+        
+        let key_bytes = result.unwrap();
+        assert_eq!(key_bytes.len(), 32, "Key should be 32 bytes");
+        
+        // Verify it's a valid Ed25519 private key
+        let signing_key = SigningKey::from_bytes(&key_bytes);
+        let _ = signing_key.verifying_key(); // Should not panic
+        
+        println!("Successfully parsed raw Ed25519 private key");
+    }
+
+    /// Test parsing a raw 32-byte Ed25519 public key
+    #[test]
+    fn test_parse_raw_ed25519_public_key() {
+        // Generate a test keypair
+        let (_, public_b64) = generate_test_keypair();
+        
+        // Parse the public key
+        let result = parse_key_simple(&public_b64, false);
+        assert!(result.is_ok(), "Failed to parse raw Ed25519 public key");
+        
+        let key_bytes = result.unwrap();
+        assert_eq!(key_bytes.len(), 32, "Key should be 32 bytes");
+        
+        // Verify it's a valid Ed25519 public key
+        let verifying_key = VerifyingKey::from_bytes(&key_bytes);
+        assert!(verifying_key.is_ok(), "Should be a valid Ed25519 public key");
+        
+        println!("Successfully parsed raw Ed25519 public key");
+    }
+
+    /// Test that parse_key_simple handles whitespace correctly
+    #[test]
+    fn test_parse_key_with_whitespace() {
+        let (private_b64, _) = generate_test_keypair();
+        
+        // Add various types of whitespace
+        let with_spaces = format!("  {}  ", private_b64);
+        let with_newlines = format!("{}\n\n", private_b64);
+        let with_tabs = format!("\t{}\t", private_b64);
+        let with_mixed = format!("\n  {}\t\n  ", private_b64);
+        
+        for key_str in [with_spaces, with_newlines, with_tabs, with_mixed] {
+            let result = parse_key_simple(&key_str, true);
+            assert!(
+                result.is_ok(),
+                "Should handle whitespace, got error: {:?}",
+                result.err()
+            );
+        }
+        
+        println!("Successfully handled various whitespace formats");
+    }
+
+    /// Test error handling for invalid base64
+    #[test]
+    fn test_parse_invalid_base64() {
+        let invalid_base64 = "this is not valid base64!!!@#$%";
+        
+        let result = parse_key_simple(invalid_base64, true);
+        assert!(result.is_err(), "Should fail on invalid base64");
+        
+        // Accept either Base64DecodingFailed or PgpParsingFailed since the function
+        // may "fix" invalid chars and decode to garbage that fails PGP extraction
+        match result.err().unwrap() {
+            CryptoError::Base64DecodingFailed(_) | CryptoError::PgpParsingFailed(_) => {
+                println!("Correctly rejected invalid input");
+            }
+            other => panic!("Expected Base64DecodingFailed or PgpParsingFailed, got: {:?}", other),
+        }
+    }
+
+    /// Test error handling for wrong-sized keys
+    #[test]
+    fn test_parse_wrong_size_key() {
+        // Create a base64 string that decodes to wrong number of bytes
+        let wrong_size = STANDARD.encode(&[0u8; 16]); // Only 16 bytes instead of 32
+        
+        let result = parse_key_simple(&wrong_size, true);
+        assert!(result.is_err(), "Should fail on wrong-sized key");
+        
+        println!("Correctly rejected wrong-sized key");
+    }
+
+    /// Test that private and public keys are correctly distinguished
+    #[test]
+    fn test_private_vs_public_key_validation() {
+        let (private_b64, public_b64) = generate_test_keypair();
+        
+        // Parse private key as private - should work
+        let result = parse_key_simple(&private_b64, true);
+        assert!(result.is_ok(), "Private key should parse as private");
+        
+        // Parse public key as public - should work
+        let result = parse_key_simple(&public_b64, false);
+        assert!(result.is_ok(), "Public key should parse as public");
+        
+        println!("Correctly validated private vs public keys");
+    }
+
+    /// Test the complete flow: generate, parse, sign, verify
+    #[test]
+    fn test_parse_key_simple_end_to_end() {
+        // Generate a keypair
+        let (private_b64, public_b64) = generate_test_keypair();
+        
+        // Parse both keys
+        let private_bytes = parse_key_simple(&private_b64, true)
+            .expect("Failed to parse private key");
+        let public_bytes = parse_key_simple(&public_b64, false)
+            .expect("Failed to parse public key");
+        
+        // Create Ed25519 keys
+        let signing_key = SigningKey::from_bytes(&private_bytes);
+        let verifying_key = VerifyingKey::from_bytes(&public_bytes)
+            .expect("Invalid public key");
+        
+        // Sign a message
+        let message = b"Test message for IronShield";
+        let signature = signing_key.sign(message);
+        
+        // Verify the signature
+        verifying_key
+            .verify(message, &signature)
+            .expect("Signature verification failed");
+        
+        // Verify that the public key derived from private matches parsed public
+        let derived_public = signing_key.verifying_key();
+        assert_eq!(
+            derived_public.to_bytes(),
+            public_bytes,
+            "Derived public key should match parsed public key"
+        );
+        
+        println!("Successfully completed end-to-end test");
+    }
+
+    /// Test empty input handling
+    #[test]
+    fn test_parse_empty_string() {
+        let result = parse_key_simple("", true);
+        assert!(result.is_err(), "Should fail on empty string");
+        
+        println!("Correctly rejected empty string");
+    }
+}
+
