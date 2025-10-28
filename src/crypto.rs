@@ -17,8 +17,8 @@
 //! ### Key Management
 //! * `load_private_key_from_env()`:            Load Ed25519 private key from environment
 //!                                             (multiple formats)
-//! * `load_public_key_from_env()`:             Load Ed25519 public key from environment
-//!                                             (multiple formats)
+//! * `load_public_key()`:                      Load Ed25519 public key from provided data
+//!                                             or environment (multiple formats)
 //! * `generate_test_keypair()`:                Generate keypair for testing.
 //!
 //! ### Challenge Signing
@@ -41,12 +41,11 @@
 //!
 //! ### Basic Usage with Raw Keys
 //! Generate test keys and set them as environment variables, then load them
-//! using `load_private_key_from_env()`.
+//! using `load_private_key_from_env()` and `load_public_key(None)`.
 //!
 //! ### Using with PGP Keys
-//! For PGP keys stored in Cloudflare Secrets Store, provide base64-encoded
-//! PGP data without ASCII armor headers in the IRONSHIELD_PRIVATE_KEY and
-//! IRONSHIELD_PUBLIC_KEY environment variables.
+//! For PGP keys stored in Cloudflare Secrets Store, use `load_public_key(Some(key_data))`
+//! with base64-encoded PGP data without ASCII armor headers.
 
 use base64::{
     Engine,
@@ -372,28 +371,83 @@ pub fn load_private_key_from_env() -> Result<SigningKey, CryptoError> {
     Ok(signing_key)
 }
 
-/// Loads the public key from the IRONSHIELD_PUBLIC_KEY environment variable
+/// Loads the public key from provided data or environment variable
 ///
-/// The environment variable should contain a base64-encoded PGP public key (without armor headers).
-/// For backward compatibility, raw base64-encoded Ed25519 keys (32 bytes) are also supported.
+/// This function attempts to load the public key in the following order:
+/// 1. If `key_data` is provided, try to parse it (for production/Cloudflare Secrets Store)
+/// 2. Fall back to IRONSHIELD_PUBLIC_KEY environment variable (for local testing)
+///
+/// The key can be in either format:
+/// - Base64-encoded PGP public key (without armor headers)
+/// - Raw base64-encoded Ed25519 public key (32 bytes, legacy format)
+///
+/// # Arguments
+/// * `key_data`: Optional key data string (for Cloudflare Workers/production)
 ///
 /// # Returns
 /// * `Result<VerifyingKey, CryptoError>`: The Ed25519 verifying key or an error
 ///
 /// # Environment Variables
-/// * `IRONSHIELD_PUBLIC_KEY`: Base64-encoded PGP public key data
-///                            (without -----BEGIN/END----- lines)
-///                            or raw base64-encoded Ed25519 public key
-///                            (legacy format)
-pub fn load_public_key_from_env() -> Result<VerifyingKey, CryptoError> {
-    let key_str: String = env::var("IRONSHIELD_PUBLIC_KEY")
+/// * `IRONSHIELD_PUBLIC_KEY`: Fallback env var for local testing
+pub fn load_public_key(key_data: Option<&str>) -> Result<VerifyingKey, CryptoError> {
+    // Try provided key_data first (production/Secrets Store)
+    if let Some(data) = key_data {
+        debug_log!("Attempting to load public key from provided data");
+        
+        // Try PGP format first
+        match parse_key_simple(data, false) {
+            Ok(key_array) => {
+                let verifying_key = VerifyingKey::from_bytes(&key_array)
+                    .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid public key from PGP: {}", e)))?;
+                debug_log!("Successfully loaded public key from provided data");
+                return Ok(verifying_key);
+            }
+            Err(CryptoError::PgpParsingFailed(_)) | Err(CryptoError::Base64DecodingFailed(_)) => {
+                // Fall through to try raw format
+            }
+            Err(e) => {
+                // For other errors, log and fall through to env var
+                debug_log!("Error parsing provided key data: {}, trying env var fallback", e);
+            }
+        }
+
+        // Try raw base64-encoded Ed25519 key (legacy format)
+        match STANDARD.decode(data.trim()) {
+            Ok(key_bytes) if key_bytes.len() == PUBLIC_KEY_LENGTH => {
+                let mut key_array = [0u8; PUBLIC_KEY_LENGTH];
+                key_array.copy_from_slice(&key_bytes);
+
+                match VerifyingKey::from_bytes(&key_array) {
+                    Ok(verifying_key) => {
+                        debug_log!("Successfully loaded public key from provided data (raw format)");
+                        return Ok(verifying_key);
+                    }
+                    Err(e) => {
+                        debug_log!("Invalid Ed25519 public key in provided data: {}, trying env var fallback", e);
+                    }
+                }
+            }
+            Ok(key_bytes) => {
+                debug_log!("Invalid key length in provided data: {} bytes, trying env var fallback", key_bytes.len());
+            }
+            Err(e) => {
+                debug_log!("Base64 decode failed for provided data: {}, trying env var fallback", e);
+            }
+        }
+    }
+
+    // Fall back to environment variable (local testing)
+    debug_log!("Loading public key from IRONSHIELD_PUBLIC_KEY environment variable");
+    
+    let key_str = env::var("IRONSHIELD_PUBLIC_KEY")
         .map_err(|_| CryptoError::MissingEnvironmentVariable("IRONSHIELD_PUBLIC_KEY".to_string()))?;
 
     // Try PGP format first
     match parse_key_simple(&key_str, false) {
         Ok(key_array) => {
-            let verifying_key: VerifyingKey = VerifyingKey::from_bytes(&key_array)
+            let verifying_key = VerifyingKey::from_bytes(&key_array)
                 .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid public key: {}", e)))?;
+            debug_log!("Successfully loaded public key from environment variable");
             return Ok(verifying_key);
         }
         Err(CryptoError::PgpParsingFailed(_)) | Err(CryptoError::Base64DecodingFailed(_)) => {
@@ -403,7 +457,7 @@ pub fn load_public_key_from_env() -> Result<VerifyingKey, CryptoError> {
     }
 
     // Fallback: try raw base64-encoded Ed25519 key (legacy format)
-    let key_bytes: Vec<u8> = STANDARD.decode(key_str.trim())
+    let key_bytes = STANDARD.decode(key_str.trim())
         .map_err(|e| CryptoError::Base64DecodingFailed(format!("Public key (legacy fallback): {}", e)))?;
 
     // Verify length for raw Ed25519 key
@@ -418,7 +472,7 @@ pub fn load_public_key_from_env() -> Result<VerifyingKey, CryptoError> {
     let key_array: [u8; PUBLIC_KEY_LENGTH] = key_bytes.try_into()
         .map_err(|_| CryptoError::InvalidKeyFormat("Failed to convert public key bytes".to_string()))?;
 
-    let verifying_key: VerifyingKey = VerifyingKey::from_bytes(&key_array)
+    let verifying_key = VerifyingKey::from_bytes(&key_array)
         .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid public key: {}", e)))?;
 
     Ok(verifying_key)
@@ -510,7 +564,7 @@ pub fn sign_challenge(challenge: &IronShieldChallenge) -> Result<[u8; 64], Crypt
 /// # Returns
 /// * `Result<(), CryptoError>`: `Ok(())` if valid, error if verification fails.
 pub fn verify_challenge_signature(challenge: &IronShieldChallenge) -> Result<(), CryptoError> {
-    let verifying_key: VerifyingKey = load_public_key_from_env()?;
+    let verifying_key: VerifyingKey = load_public_key(None)?;
 
     let message: String = create_signing_message(
         &challenge.random_nonce,
@@ -658,60 +712,6 @@ pub fn load_private_key_from_data(key_data: &str) -> Result<SigningKey, CryptoEr
     key_array.copy_from_slice(&key_bytes);
 
     Ok(SigningKey::from_bytes(&key_array))
-}
-
-/// Loads a public key from raw key data (for Cloudflare Workers)
-///
-/// This function is designed for use with Cloudflare Workers where secrets
-/// are accessible through the env parameter rather than standard environment variables.
-///
-/// # Arguments
-/// * `key_data`: Base64-encoded key data (PGP or raw Ed25519)
-///
-/// # Returns
-/// * `Result<VerifyingKey, CryptoError>`: The Ed25519 verifying key or an error
-pub fn load_public_key_from_data(key_data: &str) -> Result<VerifyingKey, CryptoError> {
-    // Try PGP format first
-    match parse_key_simple(key_data, false) {
-        Ok(key_array) => {
-            let verifying_key = VerifyingKey::from_bytes(&key_array)
-                .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid public key from PGP: {}", e)))?;
-            return Ok(verifying_key);
-        }
-        Err(CryptoError::PgpParsingFailed(_msg)) => {
-            // Fall back to raw base64 format
-        }
-        Err(CryptoError::Base64DecodingFailed(_msg)) => {
-            // Fall back to raw base64 format
-        }
-        Err(e) => {
-            return Err(e); // Return other errors immediately
-        }
-    }
-
-    // Fallback: try raw base64-encoded Ed25519 key (legacy format)
-    let key_bytes: Vec<u8> = STANDARD.decode(key_data.trim())
-        .map_err(|e| {
-            CryptoError::Base64DecodingFailed(format!("Public key (legacy fallback): {}", e))
-        })?;
-
-    // Verify length for raw Ed25519 key
-    if key_bytes.len() != PUBLIC_KEY_LENGTH {
-        let error_msg = format!(
-            "Invalid key length: expected {} bytes for Ed25519 public key, got {} bytes",
-            PUBLIC_KEY_LENGTH,
-            key_bytes.len()
-        );
-        return Err(CryptoError::InvalidKeyFormat(error_msg));
-    }
-
-    let mut key_array = [0u8; PUBLIC_KEY_LENGTH];
-    key_array.copy_from_slice(&key_bytes);
-
-    let verifying_key = VerifyingKey::from_bytes(&key_array)
-        .map_err(|e| CryptoError::InvalidKeyFormat(format!("Invalid Ed25519 public key: {}", e)))?;
-
-    Ok(verifying_key)
 }
 
 #[cfg(test)]
