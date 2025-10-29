@@ -137,6 +137,12 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Install system dependencies for sequoia-openpgp
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm pkg-config nettle-dev
+
       # Setup Rust.
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
